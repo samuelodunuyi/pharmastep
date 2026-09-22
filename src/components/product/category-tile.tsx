@@ -1,35 +1,35 @@
 import Image from "next/image";
 import Link from "next/link";
-import { CategoryArt } from "@/components/product/category-art";
+import { ArrowRight } from "lucide-react";
+import { CategoryPlaceholder } from "@/components/product/category-placeholder";
 import type { Category } from "@/generated/prisma/client";
 
 type TileCategory = Pick<Category, "slug" | "name" | "imageUrl">;
 
-/** Uses the admin-uploaded image when there is one, otherwise the illustrated artwork. */
+/** Photo card with the category name underneath, like most pharmacy storefronts. */
 export function CategoryTile({ category }: { category: TileCategory }) {
-  const photo = !!category.imageUrl;
   return (
     <Link
       href={`/categories/${category.slug}`}
-      className="group relative flex aspect-[4/3] items-end overflow-hidden rounded-xl bg-secondary ring-1 ring-foreground/5 transition-shadow hover:shadow-md"
+      className="group flex flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10 transition hover:-translate-y-0.5 hover:shadow-lg"
     >
-      {photo ? (
-        <>
+      <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
+        {category.imageUrl ? (
           <Image
-            src={category.imageUrl!}
+            src={category.imageUrl}
             alt=""
             fill
-            sizes="(min-width: 640px) 25vw, 50vw"
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            sizes="(min-width: 1024px) 22vw, (min-width: 640px) 30vw, 50vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-primary/85 via-primary/10 to-transparent" />
-        </>
-      ) : (
-        <CategoryArt slug={category.slug} className="transition-transform duration-300 group-hover:scale-105" />
-      )}
-      <span className={photo ? "relative p-3 text-sm font-semibold text-primary-foreground sm:text-base" : "relative p-3 text-sm font-semibold text-foreground sm:text-base"}>
-        {category.name}
-      </span>
+        ) : (
+          <CategoryPlaceholder />
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-2 px-3 py-3 sm:px-4">
+        <span className="text-sm font-semibold leading-tight sm:text-base">{category.name}</span>
+        <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-brand" />
+      </div>
     </Link>
   );
 }

@@ -76,7 +76,7 @@ async function migrateCategories() {
       ? { id: slug }
       : await prisma.category.upsert({
           where: { slug },
-          create: { slug, name: c.name, sortOrder: i },
+          create: { slug, name: c.name, imageUrl: `/images/categories/${slug}.jpg`, sortOrder: i },
           update: {},
         });
     map.set(c.id.toLowerCase(), row.id);

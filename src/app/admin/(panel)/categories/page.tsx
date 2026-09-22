@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { CategoryForm } from "@/components/admin/category-form";
-import { CategoryArt } from "@/components/product/category-art";
+import { CategoryPlaceholder } from "@/components/product/category-placeholder";
 import { deleteCategoryAction } from "@/app/actions/admin";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -31,7 +31,7 @@ export default async function AdminCategoriesPage() {
         <Card key={c.id}>
           <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-start">
             <div className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-secondary">
-              {c.imageUrl ? <Image src={c.imageUrl} alt="" fill sizes="64px" className="object-cover" /> : <CategoryArt slug={c.slug} compact />}
+              {c.imageUrl ? <Image src={c.imageUrl} alt="" fill sizes="64px" className="object-cover" /> : <CategoryPlaceholder />}
             </div>
             <div className="flex-1 space-y-2">
               <CategoryForm category={c} />
