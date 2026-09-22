@@ -1,0 +1,206 @@
+// PharmaStep database schema.
+// All money is stored in kobo (1 naira = 100 kobo) as integers, matching Paystack.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CUSTOMER
+  PHARMACIST
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PrescriptionStatus {
+  NOT_REQUIRED
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+/// One row per Supabase Auth user. `id` equals auth.users.id.
+model Profile {
+  id          String   @id @db.Uuid
+  email       String   @unique
+  fullName    String?
+  phone       String?
+  role        Role     @default(CUSTOMER)
+  firebaseUid String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cart          Cart?
+  orders        Order[]
+  reviewedRx    Prescription[] @relation("RxReviewer")
+  orderEvents   OrderEvent[]
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  name      String
+  imageUrl  String?
+  sortOrder Int       @default(0)
+  products  Product[]
+}
+
+model Product {
+  id                   String    @id @default(cuid())
+  slug                 String    @unique
+  name                 String
+  manufacturer         String?
+  description          String?
+  activeIngredient     String?
+  strength             String?
+  packSize             String?
+  /// e.g. Tablet, Caplet, Capsule, Sachet, Syrup, Cream, Pack
+  dosageForm           String?
+  nafdacNumber         String?
+  priceKobo            Int
+  compareAtPriceKobo   Int?
+  stock                Int       @default(0)
+  requiresPrescription Boolean   @default(false)
+  isActive             Boolean   @default(true)
+  images               String[]
+  tags                 String[]
+  expiryDate           DateTime?
+  categoryId           String?
+  category             Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  firebaseId           String?   @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([categoryId, isActive])
+  @@index([dosageForm])
+}
+
+/// A cart belongs to a signed-in profile, or to a guest via the `cart_id` cookie.
+model Cart {
+  id        String     @id @default(cuid())
+  profileId String?    @unique @db.Uuid
+  profile   Profile?   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String  @id @default(cuid())
+  cartId    String
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int
+
+  @@unique([cartId, productId])
+}
+
+model Order {
+  id                 String             @id @default(cuid())
+  /// Order number shown to customers, e.g. PS-7K3M9Q2A.
+  reference          String             @unique
+  /// Reference of the latest Paystack attempt (a retry needs a new one).
+  paystackRef        String?            @unique
+  profileId          String?            @db.Uuid
+  profile            Profile?           @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  email              String
+  customerName       String
+  phone              String
+  addressLine        String
+  city               String
+  state              String             @default("Lagos")
+  deliveryNotes      String?
+  deliveryDistanceKm Float?
+  subtotalKobo       Int
+  deliveryFeeKobo    Int
+  totalKobo          Int
+  status             OrderStatus        @default(PENDING_PAYMENT)
+  prescriptionStatus PrescriptionStatus @default(NOT_REQUIRED)
+  paidAt             DateTime?
+  paystackTxnId      String?
+  /// Cart the order was placed from; emptied once payment is confirmed.
+  sourceCartId       String?
+  /// Lets guests view their order without an account.
+  trackingToken      String             @unique @default(cuid())
+  isLegacy           Boolean            @default(false)
+  legacyStatus       String?
+  firebaseId         String?            @unique
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  items        OrderItem[]
+  events       OrderEvent[]
+  prescription Prescription?
+
+  @@index([profileId, createdAt])
+  @@index([status, createdAt])
+  @@index([email])
+}
+
+/// Snapshot of what was bought, so later product edits don't change past orders.
+model OrderItem {
+  id                   String   @id @default(cuid())
+  orderId              String
+  order                Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId            String?
+  product              Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName          String
+  unitPriceKobo        Int
+  quantity             Int
+  requiresPrescription Boolean  @default(false)
+}
+
+model OrderEvent {
+  id        String       @id @default(cuid())
+  orderId   String
+  order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus?
+  note      String
+  actorId   String?      @db.Uuid
+  actor     Profile?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime     @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model Prescription {
+  id          String             @id @default(cuid())
+  orderId     String             @unique
+  order       Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  /// Path inside the private `prescriptions` storage bucket.
+  filePath    String
+  status      PrescriptionStatus @default(PENDING_REVIEW)
+  reviewerId  String?            @db.Uuid
+  reviewer    Profile?           @relation("RxReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviewNote  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime           @default(now())
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  handled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
