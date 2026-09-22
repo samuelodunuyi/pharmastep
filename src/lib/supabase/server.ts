@@ -1,13 +1,14 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { supabaseUrl } from "@/lib/env";
 
 /** Supabase client bound to the current request's auth cookies. Create one per request. */
 export async function createSupabaseServerClient() {
   const cookieStore = await cookies();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseUrl(),
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       cookies: {

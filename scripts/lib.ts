@@ -19,7 +19,8 @@ export const prisma = new PrismaClient({
 });
 
 export function supabaseAdmin() {
-  return createClient(requireEnv("NEXT_PUBLIC_SUPABASE_URL"), requireEnv("SUPABASE_SECRET_KEY"), {
+  // Accept the REST endpoint URL too (…/rest/v1/); the client needs just the origin.
+  return createClient(new URL(requireEnv("NEXT_PUBLIC_SUPABASE_URL")).origin, requireEnv("SUPABASE_SECRET_KEY"), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }

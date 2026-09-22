@@ -33,6 +33,19 @@ export function missingEnv(vars: EnvVar[]) {
   return vars.filter((v) => !read(v.name));
 }
 
+/**
+ * The Supabase project URL, reduced to its origin. People often paste the REST endpoint
+ * (https://<ref>.supabase.co/rest/v1/) from the dashboard; the client needs just the origin.
+ */
+export function supabaseUrl(): string {
+  const raw = read("NEXT_PUBLIC_SUPABASE_URL") ?? "";
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return raw;
+  }
+}
+
 export function isSupabaseConfigured() {
   return !!read("NEXT_PUBLIC_SUPABASE_URL") && !!read("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
 }

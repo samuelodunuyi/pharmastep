@@ -14,10 +14,17 @@ function createClient() {
 type Client = ReturnType<typeof createClient>;
 
 // Reuse one client per process; in dev, survive hot reloads.
-const globalForPrisma = globalThis as unknown as { prisma?: Client };
+// Keyed by the connection string so editing DATABASE_URL in .env takes effect without a restart.
+const globalForPrisma = globalThis as unknown as { prisma?: Client; prismaUrl?: string };
 
 function getClient() {
-  globalForPrisma.prisma ??= createClient();
+  const url = process.env.DATABASE_URL;
+  if (!globalForPrisma.prisma || globalForPrisma.prismaUrl !== url) {
+    const previous = globalForPrisma.prisma;
+    globalForPrisma.prisma = createClient();
+    globalForPrisma.prismaUrl = url;
+    void previous?.$disconnect().catch(() => {});
+  }
   return globalForPrisma.prisma;
 }
 
