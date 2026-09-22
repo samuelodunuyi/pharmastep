@@ -6,7 +6,7 @@ async function main() {
     const slug = slugify(c.id);
     await prisma.category.upsert({
       where: { slug },
-      create: { slug, name: c.name, imageUrl: `/images/${c.image}`, sortOrder: i },
+      create: { slug, name: c.name, sortOrder: i },
       update: {},
     });
   }

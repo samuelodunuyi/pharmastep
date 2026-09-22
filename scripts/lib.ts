@@ -28,21 +28,24 @@ export function supabaseAdmin() {
 // Same slug rules as the app, so imported categories match /category/<old id> redirects.
 export { slugify } from "../src/lib/format";
 
-/** Categories from the old site, keyed by the Firestore `product_type` value. */
-export const LEGACY_CATEGORIES: { id: string; name: string; image: string }[] = [
-  { id: "Antibacterial", name: "Antibacterials", image: "antimicrobial.jpg" },
-  { id: "Anti_Malarials", name: "Anti Malarials", image: "malaria.jpg" },
-  { id: "Contraceptives", name: "Contraceptives", image: "contraceptives.jpg" },
-  { id: "Cream_and_ointments", name: "Creams and ointments", image: "creams.jpg" },
-  { id: "Antidiabetics", name: "Antidiabetics", image: "antidiabetic.jpg" },
-  { id: "Antihypertensives", name: "Antihypertensives", image: "antihypertensive.jpg" },
-  { id: "Skincare", name: "Skincare", image: "derm.jpg" },
-  { id: "Pain_management", name: "Pain management", image: "headaches.jpg" },
-  { id: "Pessaries", name: "Pessaries", image: "pessaries.png" },
-  { id: "Antihistamines", name: "Antihistamines", image: "Antihistamines.jpg" },
-  { id: "Antiemetics", name: "Antiemetics", image: "antiemetics.jpg" },
-  { id: "Antipsychotics", name: "Antipsychotics", image: "Antipsychotics.jpg" },
-  { id: "Vitamins", name: "Vitamins", image: "vitamins.jpg" },
-  { id: "Gastrointestinal", name: "Gastrointestinal", image: "Gastrointestinal.jpg" },
-  { id: "Sexual_health", name: "Sexual health", image: "sexual.jpg" },
+/**
+ * Categories from the old site, keyed by the Firestore `product_type` value.
+ * No images: the store shows illustrated artwork until an admin uploads one.
+ */
+export const LEGACY_CATEGORIES: { id: string; name: string }[] = [
+  { id: "Antibacterial", name: "Antibacterials" },
+  { id: "Anti_Malarials", name: "Anti Malarials" },
+  { id: "Contraceptives", name: "Contraceptives" },
+  { id: "Cream_and_ointments", name: "Creams and ointments" },
+  { id: "Antidiabetics", name: "Antidiabetics" },
+  { id: "Antihypertensives", name: "Antihypertensives" },
+  { id: "Skincare", name: "Skincare" },
+  { id: "Pain_management", name: "Pain management" },
+  { id: "Pessaries", name: "Pessaries" },
+  { id: "Antihistamines", name: "Antihistamines" },
+  { id: "Antiemetics", name: "Antiemetics" },
+  { id: "Antipsychotics", name: "Antipsychotics" },
+  { id: "Vitamins", name: "Vitamins" },
+  { id: "Gastrointestinal", name: "Gastrointestinal" },
+  { id: "Sexual_health", name: "Sexual health" },
 ];
