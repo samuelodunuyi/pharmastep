@@ -4,11 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireStaff } from "@/lib/auth";
+import { isStaff, requireStaff } from "@/lib/auth";
 import { nairaToKobo, slugify } from "@/lib/format";
+import { generateTempPassword } from "@/lib/passwords";
 import { refundTransaction } from "@/lib/paystack";
 import { uploadProductImage } from "@/lib/storage";
 import { randomCode } from "@/lib/orders";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { emailSchema, fieldErrorsFrom, fullNameSchema } from "@/lib/validation";
 import type { OrderStatus } from "@/generated/prisma/client";
 import type { FormState } from "@/lib/form-state";
 
@@ -282,17 +285,95 @@ export async function deleteCategoryAction(formData: FormData) {
 
 // ---------- Staff & messages ----------
 
-export async function setRoleAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const admin = await requireStaff(true);
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const role = String(formData.get("role"));
-  if (!["CUSTOMER", "PHARMACIST", "ADMIN"].includes(role)) return { error: "Invalid role." };
-  const profile = await db.profile.findUnique({ where: { email } });
-  if (!profile) return { error: "No account with that email. Ask them to sign up first." };
-  if (profile.id === admin.id && role !== "ADMIN") return { error: "You can’t remove your own admin access." };
-  await db.profile.update({ where: { email }, data: { role: role as "CUSTOMER" | "PHARMACIST" | "ADMIN" } });
+// Staff accounts are separate from customer accounts: they're only ever created here (or by
+// scripts/create-admin.ts), with a temporary password the person must change at first sign-in.
+
+const STAFF_ROLES = ["PHARMACIST", "ADMIN"] as const;
+type StaffRole = (typeof STAFF_ROLES)[number];
+
+const NewStaffSchema = z.object({
+  fullName: fullNameSchema,
+  email: emailSchema,
+  role: z.enum(STAFF_ROLES),
+});
+
+function oneTimePassword(value: string) {
+  return { label: "Temporary password (shown once)", value };
+}
+
+export async function addStaffAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireStaff(true);
+  const parsed = NewStaffSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed.error) };
+  const { fullName, email, role } = parsed.data;
+
+  const emailTaken = "An account with this email already exists. Staff need their own email address, separate from any customer account.";
+  if (await db.profile.findUnique({ where: { email } })) return { fieldErrors: { email: emailTaken } };
+
+  const supabase = createSupabaseAdminClient();
+  const password = generateTempPassword();
+  const { data, error } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: fullName },
+  });
+  if (error || !data.user) {
+    return error?.code === "email_exists" ? { fieldErrors: { email: emailTaken } } : { error: error?.message ?? "Couldn’t create the account." };
+  }
+
+  try {
+    await db.profile.create({ data: { id: data.user.id, email, fullName, role, mustChangePassword: true } });
+  } catch (err) {
+    await supabase.auth.admin.deleteUser(data.user.id);
+    throw err;
+  }
+
   revalidatePath("/admin/staff");
-  return { message: `${email} is now ${role.toLowerCase()}.` };
+  return {
+    message: `${fullName} can now sign in at /admin/login with ${email} and this password. Share it privately; they’ll choose their own when they first sign in.`,
+    reveal: oneTimePassword(password),
+  };
+}
+
+/** Loads another staff member for an admin action. Admins can't act on their own account here. */
+async function otherStaff(formData: FormData) {
+  const admin = await requireStaff(true);
+  const target = await db.profile.findUnique({ where: { id: String(formData.get("id")) } });
+  if (!target || !isStaff(target)) return { error: "Staff member not found." } as const;
+  if (target.id === admin.id) return { error: "You can’t change your own account here." } as const;
+  return { target } as const;
+}
+
+export async function changeStaffRoleAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const found = await otherStaff(formData);
+  if ("error" in found) return { error: found.error };
+  const role = String(formData.get("role")) as StaffRole;
+  if (!STAFF_ROLES.includes(role)) return { error: "Invalid role." };
+  await db.profile.update({ where: { id: found.target.id }, data: { role } });
+  revalidatePath("/admin/staff");
+  return { message: "Role updated." };
+}
+
+export async function resetStaffPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const found = await otherStaff(formData);
+  if ("error" in found) return { error: found.error };
+  const password = generateTempPassword();
+  const { error } = await createSupabaseAdminClient().auth.admin.updateUserById(found.target.id, { password });
+  if (error) return { error: error.message };
+  await db.profile.update({ where: { id: found.target.id }, data: { mustChangePassword: true } });
+  return { message: "Password reset. They’ll choose a new one at their next sign-in.", reveal: oneTimePassword(password) };
+}
+
+export async function removeStaffAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const found = await otherStaff(formData);
+  if ("error" in found) return { error: found.error };
+  // Deleting the login also ends their sessions. Their past order updates and reviews stay, unattributed.
+  const { error } = await createSupabaseAdminClient().auth.admin.deleteUser(found.target.id);
+  if (error && error.status !== 404) return { error: error.message };
+  await db.profile.delete({ where: { id: found.target.id } });
+  revalidatePath("/admin/staff");
+  return { message: `${found.target.email} no longer has access.` };
 }
 
 export async function markMessageHandledAction(formData: FormData) {

@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, startTransition, useActionState, useContext } from "react";
+import { createContext, startTransition, useActionState, useContext, useTransition } from "react";
+import { toast } from "sonner";
 import { FormMessage } from "@/components/ui/form-message";
 import type { FormAction, FormState } from "@/lib/form-state";
 
@@ -15,8 +16,11 @@ type ActionFormProps = Omit<React.ComponentProps<"form">, "action" | "onSubmit" 
   action: FormAction;
   /** Children can read the action's state, e.g. for per-field errors. */
   children: React.ReactNode | ((state: FormState) => React.ReactNode);
-  /** Where to show the error/success message. "none" when the children render it themselves. */
-  message?: "top" | "bottom" | "none";
+  /**
+   * Where to show the error/success message. "toast" for forms that disappear on success
+   * (e.g. removing a row); "none" when the children render it themselves.
+   */
+  message?: "top" | "bottom" | "toast" | "none";
 };
 
 /**
@@ -24,7 +28,22 @@ type ActionFormProps = Omit<React.ComponentProps<"form">, "action" | "onSubmit" 
  * so React doesn't clear what the user typed when the server returns validation errors.
  */
 export function ActionForm({ action, children, message = "bottom", ...formProps }: ActionFormProps) {
-  const [state, dispatch, pending] = useActionState(action, {});
+  const [state, dispatch, statePending] = useActionState(action, {});
+  const [toastPending, startToastTransition] = useTransition();
+  const pending = message === "toast" ? toastPending : statePending;
+
+  function submit(data: FormData) {
+    if (message !== "toast") {
+      startTransition(() => dispatch(data));
+      return;
+    }
+    // Call the action directly: the form may be gone (e.g. its row removed) by the time the result arrives.
+    startToastTransition(async () => {
+      const result = await action({}, data);
+      if (result.error) toast.error(result.error);
+      else if (result.message) toast.success(result.message);
+    });
+  }
 
   return (
     <form
@@ -32,8 +51,7 @@ export function ActionForm({ action, children, message = "bottom", ...formProps 
       onSubmit={(e) => {
         e.preventDefault();
         const submitter = (e.nativeEvent as SubmitEvent).submitter;
-        const data = new FormData(e.currentTarget, submitter);
-        startTransition(() => dispatch(data));
+        submit(new FormData(e.currentTarget, submitter));
       }}
     >
       <PendingContext.Provider value={pending}>
