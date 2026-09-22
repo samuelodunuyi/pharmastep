@@ -1,10 +1,10 @@
-import Image from "next/image";
 import Link from "next/link";
 import { BadgeCheck, FileText, MessageCircle, ShieldCheck, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import { SearchForm } from "@/components/layout/search-form";
+import { HeroArt } from "@/components/brand/hero-art";
 import { CategoryGrid } from "@/components/product/category-tile";
 import { ProductGrid, productCardSelect } from "@/components/product/product-card";
 import { RxBadge } from "@/components/product/product-badges";
@@ -55,8 +55,8 @@ export default async function HomePage() {
               <Button asChild variant="ghost" size="lg"><a href={SITE.links.whatsapp}><MessageCircle /> Ask a pharmacist</a></Button>
             </div>
           </div>
-          <div className="relative hidden aspect-[4/3] overflow-hidden rounded-2xl md:block">
-            <Image src="/images/pharmBanner.jpg" alt="" fill className="object-cover" priority sizes="50vw" />
+          <div className="hidden md:block">
+            <HeroArt />
           </div>
         </div>
       </section>
