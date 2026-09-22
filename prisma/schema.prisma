@@ -40,6 +40,8 @@ model Profile {
   fullName    String?
   phone       String?
   role        Role     @default(CUSTOMER)
+  /// Staff created with a temporary password must set their own at first sign-in.
+  mustChangePassword Boolean @default(false)
   firebaseUid String?  @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

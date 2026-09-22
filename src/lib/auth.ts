@@ -40,9 +40,11 @@ export async function ensureProfile(user: SessionUser, extra?: { fullName?: stri
   const existing = await db.profile.findUnique({ where: { id: user.id } });
   if (existing) return existing;
 
-  // Imported Firebase users already have a profile keyed by email; attach it to the new auth id.
+  // Imported Firebase customers already have a profile keyed by email; attach it to the new auth id.
+  // Never do this for staff profiles, or a new sign-up could inherit staff access.
   const legacy = await db.profile.findUnique({ where: { email: user.email.toLowerCase() } });
   if (legacy) {
+    if (legacy.role !== "CUSTOMER") throw new Error("This email belongs to a staff account.");
     return db.profile.update({ where: { email: legacy.email }, data: { id: user.id } });
   }
 
@@ -66,9 +68,15 @@ export function isStaff(profile: Pick<Profile, "role"> | null) {
   return profile?.role === "ADMIN" || profile?.role === "PHARMACIST";
 }
 
-/** Admin area guard. Pharmacists can review prescriptions and orders; only admins manage the catalog. */
-export async function requireStaff(adminOnly = false) {
-  const profile = await requireProfile("/admin");
-  if (adminOnly ? profile.role !== "ADMIN" : !isStaff(profile)) redirect("/");
+/**
+ * Admin area guard. Staff sign in at /admin/login, never through the customer pages.
+ * Pharmacists can review prescriptions and orders; only admins manage the catalog and staff.
+ */
+export async function requireStaff(adminOnly = false, { allowPendingPasswordChange = false } = {}) {
+  const profile = await getCurrentProfile();
+  if (!profile) redirect("/admin/login");
+  if (!isStaff(profile)) redirect("/admin/login?error=not-staff");
+  if (profile.mustChangePassword && !allowPendingPasswordChange) redirect("/admin/change-password");
+  if (adminOnly && profile.role !== "ADMIN") redirect("/admin");
   return profile;
 }
