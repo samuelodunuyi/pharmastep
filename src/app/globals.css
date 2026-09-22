@@ -103,18 +103,6 @@
   }
 }
 
-/* Gentle bob used by the home page illustration. Uses `transform`, which Tailwind v4's
-   separate translate/rotate utilities don't touch, so rotated elements keep their angle. */
-@keyframes hero-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
 /* Page width + gutters, shared by every page. */
 @utility container-page {
   @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;

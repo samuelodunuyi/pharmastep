@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import { SearchForm } from "@/components/layout/search-form";
-import { HeroArt } from "@/components/brand/hero-art";
+import { HeroPhoto } from "@/components/brand/hero-photo";
 import { CategoryGrid } from "@/components/product/category-tile";
 import { ProductGrid, productCardSelect } from "@/components/product/product-card";
 import { RxBadge } from "@/components/product/product-badges";
@@ -55,8 +55,8 @@ export default async function HomePage() {
               <Button asChild variant="ghost" size="lg"><a href={SITE.links.whatsapp}><MessageCircle /> Ask a pharmacist</a></Button>
             </div>
           </div>
-          <div className="hidden md:block">
-            <HeroArt />
+          <div className="hidden pb-4 md:block">
+            <HeroPhoto />
           </div>
         </div>
       </section>
