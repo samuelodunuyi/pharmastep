@@ -10,7 +10,7 @@ export function ProductGallery({ images, alt }: { images: string[]; alt: string 
   return (
     <div>
       <Card className="relative aspect-square py-0">
-        <ProductImage src={images[active]} alt={alt} sizes="(min-width: 768px) 45vw, 100vw" priority className="p-6" />
+        <ProductImage src={images[active]} alt={alt} sizes="(min-width: 768px) 45vw, 100vw" priority />
       </Card>
       {images.length > 1 && (
         <div className="mt-3 flex gap-2 overflow-x-auto">
@@ -26,7 +26,7 @@ export function ProductGallery({ images, alt }: { images: string[]; alt: string 
                 i === active && "border-primary ring-3 ring-ring/30",
               )}
             >
-              <ProductImage src={src} alt="" sizes="64px" className="p-1" />
+              <ProductImage src={src} alt="" sizes="64px" />
             </button>
           ))}
         </div>

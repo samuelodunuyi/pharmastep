@@ -75,7 +75,7 @@ export function ProductForm({ values, categories }: { values: ProductFormValues;
                     {images.map((src) => (
                       <div key={src} className="relative size-24 overflow-hidden rounded-lg border bg-background">
                         <input type="hidden" name="keepImage" value={src} />
-                        <ProductImage src={src} alt="" sizes="96px" className="p-1" />
+                        <ProductImage src={src} alt="" sizes="96px" />
                         <Button
                           type="button"
                           variant="secondary"

@@ -23,5 +23,6 @@ export function ProductImage({
       </div>
     );
   }
-  return <Image src={src} alt={alt} fill sizes={sizes} priority={priority} className={cn("object-contain p-2", className)} />;
+  // Cover fills the frame for photos; admins uploading plain packshots on white still look fine cropped.
+  return <Image src={src} alt={alt} fill sizes={sizes} priority={priority} className={cn("object-cover", className)} />;
 }
