@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: { default: `${SITE.name} — Online pharmacy in Lagos`, template: `%s | ${SITE.name}` },
   description: SITE.description,
-  icons: { icon: "/favicon.ico" },
+  // Icons come from src/app/icon.jpg and apple-icon.jpg (Next.js file convention).
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
