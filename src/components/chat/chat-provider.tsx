@@ -146,7 +146,7 @@ export function ChatProvider({ assistantEnabled, children }: { assistantEnabled:
     send: (text) =>
       post(
         { type: "message", chatId: activeId || undefined, text },
-        { id: `pending-${Date.now()}`, role: "CUSTOMER", content: text, authorName: null, createdAt: new Date().toISOString(), products: [] },
+        { id: `pending-${Date.now()}`, role: "CUSTOMER", content: text, authorName: null, createdAt: new Date().toISOString(), products: [], sources: [] },
       ),
     requestPharmacist: () => {
       if (activeId) post({ type: "handover", chatId: activeId });

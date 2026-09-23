@@ -260,6 +260,8 @@ model ChatMessage {
   content        String
   /// Products the assistant suggested with this message.
   productIds     String[]
+  /// Where an assistant message's information came from, beyond the model's own knowledge: [{ label, url? }].
+  sources        Json?
   /// The pharmacist who wrote it.
   authorId       String?          @db.Uuid
   author         Profile?         @relation(fields: [authorId], references: [id], onDelete: SetNull)

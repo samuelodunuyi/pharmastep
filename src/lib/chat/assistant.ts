@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { formatNaira } from "@/lib/format";
 import type { Handover } from "@/lib/chat/triage";
+import { CATALOGUE_SOURCE, type ChatSource } from "@/lib/chat/types";
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5-5";
 /** Model round trips per customer message (searching, then answering, usually takes 2–3). */
@@ -82,7 +83,7 @@ const SEVERITY = { moderate: "MODERATE", severe: "SEVERE", emergency: "EMERGENCY
 
 export type AssistantTurn = { role: "user" | "assistant"; content: string };
 export type AssistantOutcome =
-  | { type: "reply"; text: string; productIds: string[] }
+  | { type: "reply"; text: string; productIds: string[]; sources: ChatSource[] }
   | { type: "handover"; handover: Handover };
 
 let client: Anthropic | undefined;
@@ -125,6 +126,7 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
   const messages: Anthropic.Beta.BetaMessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
   const found = new Set<string>();
   let recommended: string[] = [];
+  let searched = false;
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const response = await anthropic().beta.messages.create({
@@ -163,7 +165,7 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
         .join("\n")
         .trim();
       if (!text) return { type: "handover", handover: { severity: null, reason: "The assistant gave no answer." } };
-      return { type: "reply", text, productIds: recommended };
+      return { type: "reply", text, productIds: recommended, sources: searched ? [CATALOGUE_SOURCE] : [] };
     }
 
     messages.push({ role: "assistant", content: response.content });
@@ -171,6 +173,7 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
     for (const tool of toolUses) {
       if (tool.name === "search_products") {
         const products = await searchProducts((tool.input as { query: string }).query);
+        searched = true;
         products.forEach((p) => found.add(p.id));
         const listing = products.map((p) => ({
           id: p.id,

@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Info } from "lucide-react";
+import { Globe, Info, Package, Sparkles, type LucideIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { AddToCartButton } from "@/components/product/add-to-cart-button";
 import { Price } from "@/components/product/product-badges";
 import { ProductImage } from "@/components/product/product-image";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { ChatMessageView, ChatProduct } from "@/lib/chat/types";
+import type { ChatMessageView, ChatProduct, ChatSource } from "@/lib/chat/types";
 
 type Viewer = "customer" | "pharmacist";
 
@@ -49,8 +50,38 @@ function Bubble({ message: m, viewer }: { message: ChatMessageView; viewer: View
           ))}
         </ul>
       )}
-      <time dateTime={m.createdAt} className="px-1 text-[11px] text-muted-foreground">{formatTime(m.createdAt)}</time>
+      {m.role === "ASSISTANT" && <Provenance sources={m.sources} />}
+      <p className="px-1 text-[11px] text-muted-foreground">
+        {m.role === "ASSISTANT" && "Automated · not reviewed by a pharmacist · "}
+        <time dateTime={m.createdAt}>{formatTime(m.createdAt)}</time>
+      </p>
     </div>
+  );
+}
+
+/**
+ * Where an assistant reply's information came from. The advice itself is always the model's own
+ * knowledge; recorded sources (the catalogue, later websites) are added as their own pills.
+ */
+function Provenance({ sources }: { sources: ChatSource[] }) {
+  return (
+    <div className="flex max-w-[85%] flex-wrap gap-1.5 px-1">
+      <SourcePill icon={Sparkles} label="AI general knowledge" title="Health advice comes from the AI model’s training, not from a specific website or document." />
+      {sources.map((source) => (
+        <SourcePill key={source.label} icon={source.url?.startsWith("/") ? Package : Globe} {...source} />
+      ))}
+    </div>
+  );
+}
+
+function SourcePill({ icon: Icon, label, url, title }: ChatSource & { icon: LucideIcon; title?: string }) {
+  const content = <><Icon data-icon="inline-start" /> {label}</>;
+  if (!url) return <Badge variant="outline" title={title}>{content}</Badge>;
+  const external = !url.startsWith("/");
+  return (
+    <Badge asChild variant="outline" className="hover:bg-accent">
+      {external ? <a href={url} target="_blank" rel="noreferrer">{content}</a> : <Link href={url}>{content}</Link>}
+    </Badge>
   );
 }
 

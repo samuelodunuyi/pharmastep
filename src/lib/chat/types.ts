@@ -15,6 +15,12 @@ export type ChatProduct = {
   stock: number;
 };
 
+/** A place an assistant reply took information from, shown as a pill. `url` makes it a link. */
+export type ChatSource = { label: string; url?: string };
+
+/** Set on a reply that used the product search. */
+export const CATALOGUE_SOURCE: ChatSource = { label: "PharmaStep catalogue", url: "/products" };
+
 export type ChatMessageView = {
   id: string;
   role: ChatRole;
@@ -23,6 +29,8 @@ export type ChatMessageView = {
   authorName: string | null;
   createdAt: string;
   products: ChatProduct[];
+  /** Assistant replies only. Anything not covered here comes from the model's general knowledge. */
+  sources: ChatSource[];
 };
 
 export type ChatView = {

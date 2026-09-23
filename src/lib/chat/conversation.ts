@@ -6,7 +6,7 @@ import { getCurrentProfile } from "@/lib/auth";
 import { isAssistantConfigured } from "@/lib/env";
 import { runAssistant, type AssistantOutcome, type AssistantTurn } from "@/lib/chat/assistant";
 import { CHAT_NOTICES, handoverNotice, looksLikeEmergency, type Handover } from "@/lib/chat/triage";
-import type { ChatMessageView, ChatProduct, ChatState, ChatSummary, ChatView } from "@/lib/chat/types";
+import type { ChatMessageView, ChatProduct, ChatSource, ChatState, ChatSummary, ChatView } from "@/lib/chat/types";
 import type { ChatConversation, ChatRole, Prisma, Profile } from "@/generated/prisma/client";
 
 type Pharmacist = Pick<Profile, "id" | "fullName">;
@@ -85,7 +85,7 @@ async function startChat() {
 // ---------- Messages and status ----------
 
 /** Adds a message and marks the chat as active, so it sorts to the top of everyone's lists. */
-async function addMessage(chatId: string, role: ChatRole, content: string, extra: { productIds?: string[]; authorId?: string } = {}) {
+async function addMessage(chatId: string, role: ChatRole, content: string, extra: { productIds?: string[]; sources?: ChatSource[]; authorId?: string } = {}) {
   await db.chatMessage.create({ data: { conversationId: chatId, role, content, ...extra } });
   await db.chatConversation.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
 }
@@ -171,7 +171,7 @@ async function answerWithAssistant(chat: ChatConversation, text: string) {
 
   // A pharmacist may have taken over while the assistant was thinking; their word wins.
   const stillWithAssistant = await db.chatConversation.count({ where: { id: chat.id, status: "BOT" } });
-  if (stillWithAssistant) await addMessage(chat.id, "ASSISTANT", outcome.text, { productIds: outcome.productIds });
+  if (stillWithAssistant) await addMessage(chat.id, "ASSISTANT", outcome.text, { productIds: outcome.productIds, sources: outcome.sources });
 }
 
 // ---------- Customer side ----------
@@ -274,6 +274,8 @@ export async function loadChatMessages(chatId: string): Promise<ChatMessageView[
     authorName: m.author ? (m.author.fullName ?? m.author.email) : null,
     createdAt: m.createdAt.toISOString(),
     products: m.productIds.flatMap((id) => byId.get(id) ?? []),
+    // Written only by this module, in the ChatSource shape.
+    sources: (m.sources as ChatSource[] | null) ?? [],
   }));
 }
 
