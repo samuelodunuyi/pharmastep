@@ -7,10 +7,10 @@ export const SHOP_LINKS = [
   { href: "/products?rx=1", label: "Prescription medicines" },
 ] as const;
 
+/** The chat with a pharmacist is a button (OpenChatButton) placed alongside these. */
 export const HELP_LINKS = [
   { href: "/track", label: "Track an order" },
   { href: "/contact", label: "Contact us" },
-  { href: SITE.links.whatsapp, label: "WhatsApp a pharmacist" },
 ] as const;
 
 export const APP_LINKS = [

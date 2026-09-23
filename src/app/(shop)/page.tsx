@@ -8,8 +8,8 @@ import { HeroPhoto } from "@/components/brand/hero-photo";
 import { CategoryGrid } from "@/components/product/category-tile";
 import { ProductGrid, productCardSelect } from "@/components/product/product-card";
 import { RxBadge } from "@/components/product/product-badges";
+import { OpenChatButton } from "@/components/chat/chat-provider";
 import { db } from "@/lib/db";
-import { SITE } from "@/lib/site";
 
 const TRUST_POINTS = [
   { icon: ShieldCheck, title: "Genuine medicines", text: "Sourced from licensed distributors" },
@@ -52,7 +52,7 @@ export default async function HomePage() {
             <SearchForm placeholder="What are you looking for?" withButton size="lg" className="mt-6 max-w-lg" />
             <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild variant="outline" size="lg"><Link href="/categories">Browse categories</Link></Button>
-              <Button asChild variant="ghost" size="lg"><a href={SITE.links.whatsapp}><MessageCircle /> Ask a pharmacist</a></Button>
+              <OpenChatButton variant="ghost" size="lg"><MessageCircle /> Ask a pharmacist</OpenChatButton>
             </div>
           </div>
           <div className="hidden pb-4 md:block">

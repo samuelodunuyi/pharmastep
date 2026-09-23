@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Wordmark } from "@/components/brand/logo";
+import { OpenChatButton } from "@/components/chat/chat-provider";
 import { HELP_LINKS, SHOP_LINKS } from "@/components/layout/nav-links";
 
 export function MobileNav() {
@@ -31,6 +32,9 @@ export function MobileNav() {
               </SheetClose>
             </div>
           ))}
+          <SheetClose asChild>
+            <OpenChatButton variant="ghost" className="h-auto justify-start px-2 py-2.5 font-medium">Chat with a pharmacist</OpenChatButton>
+          </SheetClose>
         </nav>
       </SheetContent>
     </Sheet>

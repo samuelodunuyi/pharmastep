@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ShoppingBag, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
+import { OpenChatButton } from "@/components/chat/chat-provider";
 import { AccountMenu } from "@/components/layout/account-menu";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { SearchForm } from "@/components/layout/search-form";
@@ -17,9 +18,9 @@ export async function SiteHeader() {
       <div className="bg-primary text-xs text-primary-foreground/80">
         <div className="container-page flex h-8 items-center justify-between gap-4">
           <p className="truncate">{SITE.tagline}</p>
-          <a href={SITE.links.whatsapp} className="shrink-0 font-semibold text-primary-foreground hover:underline">
+          <OpenChatButton variant="link" className="h-auto shrink-0 p-0 text-xs font-semibold text-primary-foreground">
             Chat with a pharmacist
-          </a>
+          </OpenChatButton>
         </div>
       </div>
 

@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 import { Wordmark } from "@/components/brand/logo";
+import { OpenChatButton } from "@/components/chat/chat-provider";
 import { APP_LINKS, HELP_LINKS, SHOP_LINKS } from "@/components/layout/nav-links";
 import { SITE } from "@/lib/site";
 
 const COLUMNS = [
   { title: "Shop", links: SHOP_LINKS },
-  { title: "Help", links: HELP_LINKS },
+  {
+    title: "Help",
+    links: HELP_LINKS,
+    extra: <OpenChatButton variant="link" className="h-auto p-0 font-normal text-muted-foreground hover:text-primary hover:no-underline">Chat with a pharmacist</OpenChatButton>,
+  },
   { title: "Get the app", links: APP_LINKS },
 ];
 
@@ -30,6 +35,7 @@ export function SiteFooter() {
                   <Link href={l.href} className="hover:text-primary">{l.label}</Link>
                 </li>
               ))}
+              {"extra" in col && <li>{col.extra}</li>}
             </ul>
           </div>
         ))}

@@ -1,9 +1,7 @@
 import { Settings } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { Wordmark } from "@/components/brand/logo";
-import { SITE } from "@/lib/site";
 
 type EnvVar = { name: string; purpose: string };
 
@@ -18,8 +16,7 @@ export function SetupRequired({ detailed, missing, optionalMissing }: { detailed
       <CenteredMessage
         eyebrow={<Wordmark className="text-base" />}
         title="We’ll be right back"
-        description="Our online store is temporarily unavailable. Please try again shortly, or message us to place an order."
-        actions={<Button asChild variant="brand" size="xl"><a href={SITE.links.whatsapp}>Order on WhatsApp</a></Button>}
+        description="Our online store is temporarily unavailable. Please try again shortly."
       />
     );
   }

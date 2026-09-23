@@ -11,7 +11,6 @@ import { uploadPrescription, validatePrescriptionFile } from "@/lib/storage";
 import { emailSchema, fieldErrorsFrom, fullNameSchema, phoneSchema } from "@/lib/validation";
 import type { FormState } from "@/lib/form-state";
 import { isPaymentsConfigured, isStorageConfigured } from "@/lib/env";
-import { SITE } from "@/lib/site";
 
 const CheckoutSchema = z.object({
   email: emailSchema,
@@ -26,12 +25,12 @@ export async function quoteDeliveryAction(address: string, city: string): Promis
   return quoteDelivery(String(address).slice(0, 200), String(city).slice(0, 60));
 }
 
-const ORDER_BY_WHATSAPP = `You can still order by WhatsApp on ${SITE.whatsappDisplay}.`;
+const ORDER_BY_CHAT = "You can still order through the pharmacist chat on this site.";
 
 export async function placeOrderAction(_prev: FormState, formData: FormData): Promise<FormState> {
   // Refuse before creating anything if the store isn't set up to take this order.
   if (!isPaymentsConfigured()) {
-    return { error: `Online payment isn’t available right now. ${ORDER_BY_WHATSAPP}` };
+    return { error: `Online payment isn’t available right now. ${ORDER_BY_CHAT}` };
   }
 
   const parsed = CheckoutSchema.safeParse({
@@ -57,7 +56,7 @@ export async function placeOrderAction(_prev: FormState, formData: FormData): Pr
   }
 
   if (needsPrescription && !isStorageConfigured()) {
-    return { error: `We can’t accept prescription uploads online right now. ${ORDER_BY_WHATSAPP}` };
+    return { error: `We can’t accept prescription uploads online right now. ${ORDER_BY_CHAT}` };
   }
 
   const prescription = formData.get("prescription");

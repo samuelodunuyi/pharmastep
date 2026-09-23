@@ -1,12 +1,11 @@
 import { SearchX } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pager } from "@/components/ui/pager";
 import { ProductGrid, productCardSelect } from "@/components/product/product-card";
 import { ProductFilters, type FilterGroupData } from "@/components/product/product-filters";
 import { SortSelect } from "@/components/product/sort-select";
 import { db } from "@/lib/db";
-import { SITE } from "@/lib/site";
+import { OpenChatButton } from "@/components/chat/chat-provider";
 import type { Prisma } from "@/generated/prisma/client";
 
 const PAGE_SIZE = 24;
@@ -149,7 +148,7 @@ export async function ProductListing({ params, basePath }: { params: ListingPara
             icon={SearchX}
             title="No products found"
             description="Try a different spelling or the generic name. Can’t find your medicine? Our pharmacists can help source it."
-            action={<Button asChild variant="brand" size="lg"><a href={SITE.links.whatsapp}>Ask on WhatsApp</a></Button>}
+            action={<OpenChatButton variant="brand" size="lg" />}
           />
         ) : (
           <ProductGrid products={products} />
