@@ -17,6 +17,10 @@ export function formatDate(date: Date | string) {
   return new Intl.DateTimeFormat("en-NG", { dateStyle: "medium", timeStyle: "short" }).format(new Date(date));
 }
 
+export function formatTime(date: Date | string) {
+  return new Intl.DateTimeFormat("en-NG", { timeStyle: "short" }).format(new Date(date));
+}
+
 export function slugify(text: string) {
   return text
     .toLowerCase()
@@ -43,4 +47,17 @@ export const RX_STATUS_LABEL: Record<string, string> = {
   PENDING_REVIEW: "Awaiting pharmacist review",
   APPROVED: "Approved",
   REJECTED: "Rejected",
+};
+
+export const CHAT_STATUS_LABEL: Record<string, string> = {
+  BOT: "With the assistant",
+  WAITING: "Waiting for a pharmacist",
+  WITH_PHARMACIST: "With a pharmacist",
+  CLOSED: "Closed",
+};
+
+export const CHAT_SEVERITY_LABEL: Record<string, string> = {
+  MODERATE: "Moderate",
+  SEVERE: "Severe",
+  EMERGENCY: "Emergency",
 };

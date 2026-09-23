@@ -9,7 +9,10 @@ import { db } from "@/lib/db";
 
 export default async function AdminPanelLayout({ children }: { children: React.ReactNode }) {
   const staff = await requireStaff();
-  const pendingPrescriptions = await db.order.count({ where: { prescriptionStatus: "PENDING_REVIEW", status: "PAID" } });
+  const [pendingPrescriptions, waitingChats] = await Promise.all([
+    db.order.count({ where: { prescriptionStatus: "PENDING_REVIEW", status: "PAID" } }),
+    db.chatConversation.count({ where: { status: "WAITING" } }),
+  ]);
 
   return (
     <div className="min-h-screen bg-muted lg:grid lg:grid-cols-[230px_1fr]">
@@ -17,7 +20,7 @@ export default async function AdminPanelLayout({ children }: { children: React.R
         <div className="px-5 py-4">
           <Logo showMark={false} suffix={<Badge variant="secondary">Admin</Badge>} />
         </div>
-        <AdminNav isAdmin={staff.role === "ADMIN"} pendingPrescriptions={pendingPrescriptions} />
+        <AdminNav isAdmin={staff.role === "ADMIN"} counts={{ "/admin/prescriptions": pendingPrescriptions, "/admin/chats": waitingChats }} />
         <div className="flex items-center justify-between gap-2 border-t px-5 py-3 text-xs text-muted-foreground lg:mt-auto lg:block lg:space-y-2">
           <p className="min-w-0 truncate">
             {staff.fullName ?? staff.email}

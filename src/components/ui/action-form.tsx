@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, startTransition, useActionState, useContext, useTransition } from "react";
+import { createContext, startTransition, useActionState, useContext, useEffect, useRef, useTransition } from "react";
 import { toast } from "sonner";
 import { FormMessage } from "@/components/ui/form-message";
 import type { FormAction, FormState } from "@/lib/form-state";
@@ -21,14 +21,22 @@ type ActionFormProps = Omit<React.ComponentProps<"form">, "action" | "onSubmit" 
    * (e.g. removing a row); "none" when the children render it themselves.
    */
   message?: "top" | "bottom" | "toast" | "none";
+  /** Clear the fields after a successful submit (e.g. a chat reply box). */
+  resetOnSuccess?: boolean;
 };
 
 /**
  * Form bound to a server action. Submits inside a transition (rather than via the `action` prop)
  * so React doesn't clear what the user typed when the server returns validation errors.
  */
-export function ActionForm({ action, children, message = "bottom", ...formProps }: ActionFormProps) {
+export function ActionForm({ action, children, message = "bottom", resetOnSuccess, ...formProps }: ActionFormProps) {
   const [state, dispatch, statePending] = useActionState(action, {});
+  const formRef = useRef<HTMLFormElement>(null);
+  const initialState = useRef(state);
+
+  useEffect(() => {
+    if (resetOnSuccess && state !== initialState.current && !state.error && !state.fieldErrors) formRef.current?.reset();
+  }, [state, resetOnSuccess]);
   const [toastPending, startToastTransition] = useTransition();
   const pending = message === "toast" ? toastPending : statePending;
 
@@ -47,6 +55,7 @@ export function ActionForm({ action, children, message = "bottom", ...formProps 
 
   return (
     <form
+      ref={formRef}
       {...formProps}
       onSubmit={(e) => {
         e.preventDefault();

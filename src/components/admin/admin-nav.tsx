@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, LayoutDashboard, Mail, Package, ShoppingCart, Tags, Users } from "lucide-react";
+import { FileText, LayoutDashboard, Mail, MessagesSquare, Package, ShoppingCart, Tags, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -10,13 +10,15 @@ const ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart, adminOnly: false },
   { href: "/admin/prescriptions", label: "Prescriptions", icon: FileText, adminOnly: false },
+  { href: "/admin/chats", label: "Chats", icon: MessagesSquare, adminOnly: false },
   { href: "/admin/products", label: "Products", icon: Package, adminOnly: true },
   { href: "/admin/categories", label: "Categories", icon: Tags, adminOnly: true },
   { href: "/admin/staff", label: "Staff", icon: Users, adminOnly: true },
   { href: "/admin/messages", label: "Messages", icon: Mail, adminOnly: false },
 ];
 
-export function AdminNav({ isAdmin, pendingPrescriptions }: { isAdmin: boolean; pendingPrescriptions: number }) {
+/** `counts` puts a badge on a nav item, keyed by its href (e.g. prescriptions waiting for review). */
+export function AdminNav({ isAdmin, counts }: { isAdmin: boolean; counts: Record<string, number> }) {
   const pathname = usePathname();
   return (
     <nav className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col lg:overflow-visible">
@@ -34,9 +36,7 @@ export function AdminNav({ isAdmin, pendingPrescriptions }: { isAdmin: boolean; 
           >
             <Icon className="size-4" />
             {label}
-            {href === "/admin/prescriptions" && pendingPrescriptions > 0 && (
-              <Badge className="ml-auto bg-brand text-brand-foreground">{pendingPrescriptions}</Badge>
-            )}
+            {!!counts[href] && <Badge className="ml-auto bg-brand text-brand-foreground">{counts[href]}</Badge>}
           </Link>
         );
       })}
