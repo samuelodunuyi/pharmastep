@@ -36,3 +36,6 @@ npm-debug.log*
 
 # chat assistant eval reports (may contain model output for review)
 evals/chat/results/
+
+# local developer notes (setup, keys, internals)
+DEVELOPMENT.md
