@@ -4,7 +4,7 @@ Photos are from [Pexels](https://www.pexels.com) under the [Pexels licence](http
 
 | File | Source |
 |---|---|
-| `public/images/home/pharmacist.jpg` | https://www.pexels.com/photo/38774685/ |
+| `public/images/home/pharmacist-hands.jpg` | https://www.pexels.com/photo/4492069/ |
 | `public/images/categories/antibacterial.jpg` | https://www.pexels.com/photo/3850701/ |
 | `public/images/categories/anti-malarials.jpg` | https://www.pexels.com/photo/9902135/ |
 | `public/images/categories/contraceptives.jpg` | https://www.pexels.com/photo/4047113/ |
