@@ -12,6 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { OrderTotals } from "@/components/order/order-summary";
 import { placeOrderAction, quoteDeliveryAction } from "@/app/actions/checkout";
+import { AgreeToTerms } from "@/components/layout/legal-document";
 import type { DeliveryQuote } from "@/lib/delivery";
 
 type Defaults = { email: string; fullName: string; phone: string };
@@ -146,6 +147,7 @@ export function CheckoutForm({
                 <p className="text-center text-xs text-muted-foreground">
                   Card, bank transfer or USSD. The delivery fee is confirmed from your address when you pay.
                 </p>
+                <AgreeToTerms action="placing your order" />
               </CardContent>
             </Card>
           </>

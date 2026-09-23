@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { SendHorizontal, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
@@ -91,7 +92,10 @@ export function ChatConversation({ className }: { className?: string }) {
             </InputGroupAddon>
           </InputGroup>
         </form>
-        <p className="text-[11px] text-muted-foreground">Not for emergencies. If someone is seriously unwell, call 112 or go to the nearest hospital.</p>
+        <p className="text-[11px] text-muted-foreground">
+          Not for emergencies. If someone is seriously unwell, call 112 or go to the nearest hospital.{" "}
+          <Link href="/privacy" className="underline hover:text-primary">How we use chats</Link>
+        </p>
       </div>
     </div>
   );

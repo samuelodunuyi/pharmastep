@@ -15,6 +15,11 @@ export const HELP_LINKS = [
   { href: "/contact", label: "Contact us" },
 ] as const;
 
+export const LEGAL_LINKS = [
+  { href: "/terms", label: "Terms of use" },
+  { href: "/privacy", label: "Privacy policy" },
+] as const;
+
 export const APP_LINKS = [
   { href: SITE.links.playStore, label: "Google Play" },
   { href: SITE.links.instagram, label: "Instagram" },

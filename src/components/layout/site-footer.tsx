@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 import { Wordmark } from "@/components/brand/logo";
 import { OpenChatButton } from "@/components/chat/chat-provider";
-import { APP_LINKS, HELP_LINKS, SHOP_LINKS } from "@/components/layout/nav-links";
+import { APP_LINKS, HELP_LINKS, LEGAL_LINKS, SHOP_LINKS } from "@/components/layout/nav-links";
 import { SITE } from "@/lib/site";
 
 const COLUMNS = [
@@ -42,7 +42,12 @@ export function SiteFooter() {
       </div>
       <Separator />
       <div className="container-page flex flex-col gap-2 py-5 text-xs text-muted-foreground sm:flex-row sm:justify-between">
-        <p>© {new Date().getFullYear()} {SITE.legalName}. All rights reserved.</p>
+        <p>
+          © {new Date().getFullYear()} {SITE.legalName}. All rights reserved.
+          {LEGAL_LINKS.map((l) => (
+            <span key={l.href}> · <Link href={l.href} className="hover:text-primary">{l.label}</Link></span>
+          ))}
+        </p>
         <p>Payments secured by Paystack. Prescription medicines are dispensed only after pharmacist review.</p>
       </div>
     </footer>

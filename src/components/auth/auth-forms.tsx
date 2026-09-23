@@ -6,6 +6,7 @@ import { FieldGroup, FieldSeparator } from "@/components/ui/field";
 import { FormMessage } from "@/components/ui/form-message";
 import { TextField } from "@/components/ui/form-field";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { AgreeToTerms } from "@/components/layout/legal-document";
 import {
   forgotPasswordAction,
   resetPasswordAction,
@@ -82,6 +83,7 @@ export function SignUpForm({ next }: { next: string }) {
               </div>
               <FormMessage state={{ error: state.error }} />
               <SubmitButton size="xl" className="w-full">Create account</SubmitButton>
+              <AgreeToTerms action="creating an account" />
             </FieldGroup>
           );
         }}
