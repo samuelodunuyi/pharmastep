@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, LogOut, Package, User } from "lucide-react";
+import { LayoutDashboard, LogOut, MessagesSquare, Package, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { signOutAction } from "@/app/actions/auth";
+import { CHATS_PAGE } from "@/lib/chat/types";
 
 export function AccountMenu({ name, email, isStaff }: { name: string | null; email: string; isStaff: boolean }) {
   return (
@@ -27,6 +28,9 @@ export function AccountMenu({ name, email, isStaff }: { name: string | null; ema
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/account"><Package /> My orders</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href={CHATS_PAGE}><MessagesSquare /> My chats</Link>
         </DropdownMenuItem>
         {isStaff && (
           <DropdownMenuItem asChild>

@@ -6,18 +6,19 @@ import { getCurrentProfile } from "@/lib/auth";
 import { isAssistantConfigured } from "@/lib/env";
 import { runAssistant, type AssistantOutcome, type AssistantTurn } from "@/lib/chat/assistant";
 import { CHAT_NOTICES, handoverNotice, looksLikeEmergency, type Handover } from "@/lib/chat/triage";
-import type { ChatMessageView, ChatProduct, ChatView } from "@/lib/chat/types";
-import type { ChatConversation, Profile } from "@/generated/prisma/client";
+import type { ChatMessageView, ChatProduct, ChatState, ChatSummary, ChatView } from "@/lib/chat/types";
+import type { ChatConversation, ChatRole, Prisma, Profile } from "@/generated/prisma/client";
 
 type Pharmacist = Pick<Profile, "id" | "fullName">;
 
-const TOKEN_COOKIE = "chat_token";
+const GUEST_COOKIE = "chat_guest";
 const MESSAGES_PER_MINUTE = 6;
 const NEW_CHATS_PER_HOUR = 5;
 /** After this many assistant replies, a pharmacist takes over rather than the chat going on indefinitely. */
 const MAX_ASSISTANT_REPLIES = 15;
 /** How much of the conversation the assistant reads. */
 const HISTORY_LIMIT = 30;
+const HISTORY_PAGE = 50;
 
 export class ChatError extends Error {
   constructor(message: string, readonly status: number) {
@@ -25,21 +26,42 @@ export class ChatError extends Error {
   }
 }
 
+// ---------- Whose chats ----------
+
 /**
- * The customer's chat: the one in their cookie, or their latest one if signed in.
- * A chat that belongs to an account is never shown to anyone else, even with the cookie
- * (e.g. on a shared phone after signing out).
+ * The chats this visitor may see: a signed-in customer's own, or a guest's (by cookie).
+ * A guest's chats move to their account when they sign in. Chats that belong to an account are never
+ * shown through the cookie alone (e.g. on a shared phone after signing out).
  */
-async function findConversation() {
-  const [profile, token] = await Promise.all([getCurrentProfile(), cookies().then((c) => c.get(TOKEN_COOKIE)?.value)]);
-  if (token) {
-    const chat = await db.chatConversation.findUnique({ where: { accessToken: token } });
-    if (chat && (!chat.profileId || chat.profileId === profile?.id)) return { chat, profile };
+async function customerScope(): Promise<{ where: Prisma.ChatConversationWhereInput | null; profileId?: string }> {
+  const [profile, guestKey] = await Promise.all([getCurrentProfile(), cookies().then((c) => c.get(GUEST_COOKIE)?.value)]);
+  if (profile) {
+    if (guestKey) await db.chatConversation.updateMany({ where: { guestKey, profileId: null }, data: { profileId: profile.id } });
+    return { where: { profileId: profile.id }, profileId: profile.id };
   }
-  const chat = profile
-    ? await db.chatConversation.findFirst({ where: { profileId: profile.id }, orderBy: { createdAt: "desc" } })
-    : null;
-  return { chat, profile };
+  return { where: guestKey ? { guestKey, profileId: null } : null };
+}
+
+async function findOwnChat(chatId: string) {
+  const { where } = await customerScope();
+  const chat = where ? await db.chatConversation.findFirst({ where: { ...where, id: chatId } }) : null;
+  if (!chat) throw new ChatError("We couldn’t find that chat.", 404);
+  return chat;
+}
+
+async function guestKeyForNewChat() {
+  const store = await cookies();
+  const existing = store.get(GUEST_COOKIE)?.value;
+  if (existing) return existing;
+  const key = randomBytes(24).toString("base64url");
+  store.set(GUEST_COOKIE, key, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 90,
+  });
+  return key;
 }
 
 async function clientIpHash() {
@@ -47,7 +69,7 @@ async function clientIpHash() {
   return ip ? createHash("sha256").update(ip).digest("hex") : null;
 }
 
-async function startConversation(profileId: string | undefined) {
+async function startChat() {
   const ipHash = await clientIpHash();
   if (ipHash) {
     const recent = await db.chatConversation.count({
@@ -55,26 +77,17 @@ async function startConversation(profileId: string | undefined) {
     });
     if (recent >= NEW_CHATS_PER_HOUR) throw new ChatError("You’ve started a lot of chats recently. Please try again later.", 429);
   }
-  const accessToken = randomBytes(24).toString("base64url");
-  const chat = await db.chatConversation.create({ data: { accessToken, profileId, ipHash } });
-  (await cookies()).set(TOKEN_COOKIE, accessToken, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
-  return chat;
+  const { profileId } = await customerScope();
+  const guestKey = profileId ? null : await guestKeyForNewChat();
+  return db.chatConversation.create({ data: { profileId, guestKey, ipHash } });
 }
 
-/** The customer's open chat, starting a new one if they have none (or the last was closed). */
-async function openConversation() {
-  const { chat, profile } = await findConversation();
-  if (!chat || chat.status === "CLOSED") return startConversation(profile?.id);
-  if (profile && !chat.profileId) {
-    return db.chatConversation.update({ where: { id: chat.id }, data: { profileId: profile.id } });
-  }
-  return chat;
+// ---------- Messages and status ----------
+
+/** Adds a message and marks the chat as active, so it sorts to the top of everyone's lists. */
+async function addMessage(chatId: string, role: ChatRole, content: string, extra: { productIds?: string[]; authorId?: string } = {}) {
+  await db.chatMessage.create({ data: { conversationId: chatId, role, content, ...extra } });
+  await db.chatConversation.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
 }
 
 /** Moves a chat from the assistant to the pharmacists' queue. No-op if it's already there. */
@@ -89,9 +102,23 @@ async function handOver(chatId: string, handover: Handover) {
       handedOverAt: new Date(),
     },
   });
-  if (moved.count > 0) {
-    await db.chatMessage.create({ data: { conversationId: chatId, role: "SYSTEM", content: handoverNotice(handover.severity) } });
+  if (moved.count > 0) await addMessage(chatId, "SYSTEM", handoverNotice(handover.severity));
+}
+
+/**
+ * A customer writing in a closed chat reopens it: back to the pharmacists if they had been involved,
+ * otherwise back to the assistant.
+ */
+async function reopen(chat: ChatConversation): Promise<ChatConversation> {
+  if (!chat.handedOverAt) {
+    return db.chatConversation.update({ where: { id: chat.id }, data: { status: "BOT", closedAt: null } });
   }
+  const reopened = await db.chatConversation.update({
+    where: { id: chat.id },
+    data: { status: "WAITING", closedAt: null, pharmacistId: null, handoverReason: "The customer reopened this chat.", handedOverAt: new Date() },
+  });
+  await addMessage(chat.id, "SYSTEM", CHAT_NOTICES.reopened);
+  return reopened;
 }
 
 /** The conversation as the assistant sees it: customer and assistant text, with suggested products named. */
@@ -144,37 +171,87 @@ async function answerWithAssistant(chat: ChatConversation, text: string) {
 
   // A pharmacist may have taken over while the assistant was thinking; their word wins.
   const stillWithAssistant = await db.chatConversation.count({ where: { id: chat.id, status: "BOT" } });
-  if (!stillWithAssistant) return;
-  await db.chatMessage.create({
-    data: { conversationId: chat.id, role: "ASSISTANT", content: outcome.text, productIds: outcome.productIds },
-  });
+  if (stillWithAssistant) await addMessage(chat.id, "ASSISTANT", outcome.text, { productIds: outcome.productIds });
 }
 
-/** Stores the customer's message and, while the assistant is handling the chat, answers it. */
-export async function sendCustomerMessage(text: string): Promise<ChatView> {
-  const chat = await openConversation();
+// ---------- Customer side ----------
+
+/**
+ * Stores the customer's message and, while the assistant is handling the chat, answers it.
+ * Without `chatId` it starts a new chat; a closed chat is reopened.
+ */
+export async function sendCustomerMessage(chatId: string | undefined, text: string): Promise<ChatState> {
+  let chat = chatId ? await findOwnChat(chatId) : await startChat();
   const recent = await db.chatMessage.count({
     where: { conversationId: chat.id, role: "CUSTOMER", createdAt: { gte: new Date(Date.now() - 60 * 1000) } },
   });
   if (recent >= MESSAGES_PER_MINUTE) throw new ChatError("You’re sending messages too quickly. Please wait a moment.", 429);
 
-  await db.chatMessage.create({ data: { conversationId: chat.id, role: "CUSTOMER", content: text } });
-  await db.chatConversation.update({ where: { id: chat.id }, data: { updatedAt: new Date() } });
+  if (chat.status === "CLOSED") chat = await reopen(chat);
+  await addMessage(chat.id, "CUSTOMER", text);
+
   if (chat.status === "BOT") {
     await answerWithAssistant(chat, text);
   } else if (chat.severity !== "EMERGENCY" && looksLikeEmergency(text)) {
     // Already with the pharmacists: move it to the top of their queue and give the same safety advice.
     await db.chatConversation.update({ where: { id: chat.id }, data: { severity: "EMERGENCY" } });
-    await db.chatMessage.create({ data: { conversationId: chat.id, role: "SYSTEM", content: handoverNotice("EMERGENCY") } });
+    await addMessage(chat.id, "SYSTEM", handoverNotice("EMERGENCY"));
   }
-  return viewOf(chat.id);
+  return getChatState(chat.id);
 }
 
 /** "Talk to a pharmacist" button. */
-export async function requestPharmacist(): Promise<ChatView> {
-  const chat = await openConversation();
+export async function requestPharmacist(chatId: string): Promise<ChatState> {
+  const chat = await findOwnChat(chatId);
   await handOver(chat.id, { severity: null, reason: "The customer asked for a pharmacist." });
-  return viewOf(chat.id);
+  return getChatState(chat.id);
+}
+
+async function listChats(where: Prisma.ChatConversationWhereInput): Promise<ChatSummary[]> {
+  const chats = await db.chatConversation.findMany({
+    where,
+    orderBy: { updatedAt: "desc" },
+    take: HISTORY_PAGE,
+    include: { messages: { where: { role: { not: "SYSTEM" } }, orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+  const replies = await db.chatMessage.groupBy({
+    by: ["conversationId"],
+    where: { conversationId: { in: chats.map((c) => c.id) }, role: { not: "CUSTOMER" } },
+    _max: { createdAt: true },
+  });
+  const lastReply = new Map(replies.map((r) => [r.conversationId, r._max.createdAt]));
+
+  return chats.map((c) => ({
+    id: c.id,
+    status: c.status,
+    preview: c.messages[0]?.content ?? "",
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+    lastReplyAt: lastReply.get(c.id)?.toISOString() ?? null,
+  }));
+}
+
+/**
+ * The customer's chat history, plus one chat opened in full: `activeId` if given, otherwise the latest
+ * that's still open. Pass `null` to open none (starting a new chat).
+ */
+export async function getChatState(activeId?: string | null): Promise<ChatState> {
+  const { where } = await customerScope();
+  if (!where) {
+    if (activeId) throw new ChatError("We couldn’t find that chat.", 404);
+    return { conversations: [], active: null };
+  }
+  const conversations = await listChats(where);
+
+  const activeChat =
+    activeId === undefined
+      ? conversations.find((c) => c.status !== "CLOSED")
+      : activeId && (await db.chatConversation.findFirst({ where: { ...where, id: activeId }, select: { id: true, status: true } }));
+  if (activeId && !activeChat) throw new ChatError("We couldn’t find that chat.", 404);
+  const active: ChatView | null = activeChat
+    ? { id: activeChat.id, status: activeChat.status, messages: await loadChatMessages(activeChat.id) }
+    : null;
+  return { conversations, active };
 }
 
 /** Messages ready to render, with suggested products that are still on sale. Shared by the customer and admin views. */
@@ -200,16 +277,6 @@ export async function loadChatMessages(chatId: string): Promise<ChatMessageView[
   }));
 }
 
-async function viewOf(chatId: string): Promise<ChatView> {
-  const { status } = await db.chatConversation.findUniqueOrThrow({ where: { id: chatId }, select: { status: true } });
-  return { status, messages: await loadChatMessages(chatId) };
-}
-
-export async function getChatView(): Promise<ChatView> {
-  const { chat } = await findConversation();
-  return chat ? viewOf(chat.id) : { status: null, messages: [] };
-}
-
 // ---------- Pharmacist side ----------
 
 export async function joinChat(chatId: string, pharmacist: Pharmacist) {
@@ -217,19 +284,14 @@ export async function joinChat(chatId: string, pharmacist: Pharmacist) {
     where: { id: chatId, status: { in: ["BOT", "WAITING"] } },
     data: { status: "WITH_PHARMACIST", pharmacistId: pharmacist.id },
   });
-  if (joined.count > 0) {
-    await db.chatMessage.create({
-      data: { conversationId: chatId, role: "SYSTEM", content: CHAT_NOTICES.pharmacistJoined(pharmacist.fullName ?? "A pharmacist") },
-    });
-  }
+  if (joined.count > 0) await addMessage(chatId, "SYSTEM", CHAT_NOTICES.pharmacistJoined(pharmacist.fullName ?? "A pharmacist"));
 }
 
 export async function sendPharmacistMessage(chatId: string, pharmacist: Pharmacist, text: string) {
   const chat = await db.chatConversation.findUnique({ where: { id: chatId }, select: { status: true } });
   if (!chat || chat.status === "CLOSED") throw new ChatError("This chat is closed.", 409);
   if (chat.status !== "WITH_PHARMACIST") await joinChat(chatId, pharmacist);
-  await db.chatMessage.create({ data: { conversationId: chatId, role: "PHARMACIST", content: text, authorId: pharmacist.id } });
-  await db.chatConversation.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+  await addMessage(chatId, "PHARMACIST", text, { authorId: pharmacist.id });
 }
 
 export async function closeChat(chatId: string) {
@@ -237,7 +299,5 @@ export async function closeChat(chatId: string) {
     where: { id: chatId, status: { not: "CLOSED" } },
     data: { status: "CLOSED", closedAt: new Date() },
   });
-  if (closed.count > 0) {
-    await db.chatMessage.create({ data: { conversationId: chatId, role: "SYSTEM", content: CHAT_NOTICES.closed } });
-  }
+  if (closed.count > 0) await addMessage(chatId, "SYSTEM", CHAT_NOTICES.closed);
 }

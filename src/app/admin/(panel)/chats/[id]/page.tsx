@@ -31,7 +31,11 @@ export default async function AdminChatPage(props: PageProps<"/admin/chats/[id]"
     },
   });
   if (!chat) notFound();
-  const messages = await loadChatMessages(chat.id);
+  const owner = chat.profileId ? { profileId: chat.profileId } : chat.guestKey ? { guestKey: chat.guestKey } : null;
+  const [messages, otherChats] = await Promise.all([
+    loadChatMessages(chat.id),
+    owner ? db.chatConversation.findMany({ where: { ...owner, id: { not: chat.id } }, orderBy: { updatedAt: "desc" }, take: 10 }) : [],
+  ]);
 
   const customer = chat.profile ? (chat.profile.fullName ?? chat.profile.email) : "Guest";
   const open = chat.status !== "CLOSED";
@@ -102,6 +106,22 @@ export default async function AdminChatPage(props: PageProps<"/admin/chats/[id]"
             )}
           </Card>
 
+          {otherChats.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle>Their other chats</CardTitle></CardHeader>
+              <CardContent>
+                <ul className="space-y-2 text-sm">
+                  {otherChats.map((c) => (
+                    <li key={c.id} className="flex items-center justify-between gap-2">
+                      <Link href={`/admin/chats/${c.id}`} className="font-medium text-primary hover:underline">{formatDate(c.createdAt)}</Link>
+                      <ChatStatusBadge status={c.status} />
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
           {open && (
             <Card>
               <CardContent className="flex flex-col gap-2">
@@ -118,7 +138,7 @@ export default async function AdminChatPage(props: PageProps<"/admin/chats/[id]"
                     size="lg"
                     className="w-full"
                     title="Close this chat?"
-                    description="The customer is told the chat has ended. If they write again, a new chat starts."
+                    description="The customer is told the chat has ended. If they write in it again, it reopens and comes back to this queue."
                     confirmLabel="Close chat"
                   >
                     Close chat

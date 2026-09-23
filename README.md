@@ -9,7 +9,7 @@ Online pharmacy for Lagos. Next.js 16 (App Router) on Vercel, Supabase (Postgres
 - **Checkout**: guest or signed in. The server prices the order and works out the delivery fee from the address. Payment goes through Paystack's hosted page, and the order is marked paid only after Paystack confirms it (redirect and webhook, both verified with the secret key).
 - **Prescriptions**: Rx items need an uploaded prescription (private bucket). Pharmacists approve it, or reject it, which refunds automatically.
 - **Order tracking**: customers see a status timeline; guests look orders up by number and email
-- **Ask a pharmacist chat**: an in-app chat on every storefront page. An assistant (Claude) handles mild, over-the-counter cases and suggests only in-stock, non-prescription products from the catalogue. Anything moderate or worse, emergency wording, or a customer who asks goes to a pharmacist, who takes over from `/admin/chats`.
+- **Ask a pharmacist chat**: an in-app chat on every storefront page. An assistant (Claude) handles mild, over-the-counter cases and suggests only in-stock, non-prescription products from the catalogue. Anything moderate or worse, emergency wording, or a customer who asks goes to a pharmacist, who takes over from `/admin/chats`. Customers find all their chats at `/chats`, where they can continue one (writing in a closed chat reopens it) or start a new one; guests' chats are kept by a cookie and move to their account when they sign in.
 - **Admin** (`/admin`): orders, prescription queue, chats, products and images, categories, staff roles, contact messages
 
 ## First-time setup

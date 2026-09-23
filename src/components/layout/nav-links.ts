@@ -1,4 +1,5 @@
 import { SITE } from "@/lib/site";
+import { CHATS_PAGE } from "@/lib/chat/types";
 
 /** Storefront navigation, shared by the desktop header, mobile menu and footer. */
 export const SHOP_LINKS = [
@@ -10,6 +11,7 @@ export const SHOP_LINKS = [
 /** The chat with a pharmacist is a button (OpenChatButton) placed alongside these. */
 export const HELP_LINKS = [
   { href: "/track", label: "Track an order" },
+  { href: CHATS_PAGE, label: "Your chats" },
   { href: "/contact", label: "Contact us" },
 ] as const;
 

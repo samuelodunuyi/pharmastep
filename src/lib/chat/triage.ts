@@ -43,5 +43,6 @@ export function handoverNotice(severity: ChatSeverity | null) {
 
 export const CHAT_NOTICES = {
   pharmacistJoined: (name: string) => `${name} (pharmacist) has joined the chat.`,
-  closed: "This chat has been closed. Send a message any time to start a new one.",
+  closed: "This chat has been closed. You can write here again to reopen it, or start a new chat.",
+  reopened: "You’ve reopened this chat. A pharmacist will reply here as soon as possible.",
 };

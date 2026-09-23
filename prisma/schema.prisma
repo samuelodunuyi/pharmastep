@@ -226,8 +226,8 @@ enum ChatRole {
 /// "Ask a pharmacist" chat. Starts with the assistant; moderate or worse cases go to a pharmacist.
 model ChatConversation {
   id             String        @id @default(cuid())
-  /// Secret kept in the customer's `chat_token` cookie, so guests can chat without an account.
-  accessToken    String        @unique
+  /// Guests' chats are grouped by a secret kept in their `chat_guest` cookie; signed-in customers' by profileId.
+  guestKey       String?
   profileId      String?       @db.Uuid
   profile        Profile?      @relation("ChatCustomer", fields: [profileId], references: [id], onDelete: SetNull)
   /// SHA-256 of the client IP, only used to rate-limit new chats.
@@ -247,7 +247,8 @@ model ChatConversation {
   messages ChatMessage[]
 
   @@index([status, handedOverAt])
-  @@index([profileId, createdAt])
+  @@index([profileId, updatedAt])
+  @@index([guestKey, updatedAt])
   @@index([ipHash, createdAt])
 }
 
