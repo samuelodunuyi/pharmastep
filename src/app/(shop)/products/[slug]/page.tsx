@@ -12,7 +12,7 @@ import { ProductPurchase } from "@/components/product/product-purchase";
 import { db } from "@/lib/db";
 
 async function getProduct(slug: string) {
-  return db.product.findFirst({ where: { slug, isActive: true }, include: { category: true } });
+  return db.product.findFirst({ where: { slug, isActive: true }, include: { category: true, label: true } });
 }
 
 export async function generateMetadata(props: PageProps<"/products/[slug]">): Promise<Metadata> {
@@ -29,6 +29,8 @@ export default async function ProductPage(props: PageProps<"/products/[slug]">) 
   const product = await getProduct((await props.params).slug);
   if (!product) notFound();
 
+  // Only an approved label is ever shown to customers.
+  const label = product.label?.status === "APPROVED" ? product.label : null;
   const related = product.categoryId
     ? await db.product.findMany({
         where: { categoryId: product.categoryId, isActive: true, id: { not: product.id } },
@@ -122,6 +124,17 @@ export default async function ProductPage(props: PageProps<"/products/[slug]">) 
             <div className="mt-8">
               <h2 className="font-semibold">About this product</h2>
               <p className="mt-2 text-sm leading-relaxed whitespace-pre-line text-muted-foreground">{product.description}</p>
+            </div>
+          )}
+
+          {label && (
+            <div className="mt-8 space-y-3 text-sm">
+              <h2 className="font-semibold">Directions and warnings</h2>
+              <p className="leading-relaxed whitespace-pre-line text-muted-foreground">{label.directions}</p>
+              {label.warnings && <p className="leading-relaxed whitespace-pre-line text-muted-foreground">{label.warnings}</p>}
+              <p className="text-xs text-muted-foreground">
+                {label.reviewedAt ? "From the pack label, checked by a PharmaStep pharmacist." : "From the official product leaflet."}
+              </p>
             </div>
           )}
 

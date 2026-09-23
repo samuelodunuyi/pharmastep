@@ -1,5 +1,6 @@
 // Seeds categories and a sample catalogue. Safe to run repeatedly.
 import { LEGACY_CATEGORIES, prisma, slugify } from "../scripts/lib";
+import { SEED_LABELS } from "./seed-labels";
 import { SEED_PRODUCTS } from "./seed-products";
 
 async function main() {
@@ -38,6 +39,17 @@ async function main() {
     await prisma.product.upsert({ where: { slug: p.slug }, create: { slug: p.slug, ...data }, update: data });
   }
   console.log(`Seeded ${SEED_PRODUCTS.length} products.`);
+
+  // Labels only where a product has none, so a pharmacist's edits and approvals are never overwritten.
+  // Live from the official leaflet, but not marked as checked by a pharmacist.
+  let drafted = 0;
+  for (const { slug, ...label } of SEED_LABELS) {
+    const product = await prisma.product.findUnique({ where: { slug }, select: { id: true, label: { select: { productId: true } } } });
+    if (!product || product.label) continue;
+    await prisma.productLabel.create({ data: { productId: product.id, ...label, status: "APPROVED" } });
+    drafted++;
+  }
+  console.log(`Added ${drafted} labels from official leaflets (live; pharmacist check pending).`);
 }
 
 main()

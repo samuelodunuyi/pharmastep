@@ -50,6 +50,7 @@ model Profile {
   orders        Order[]
   reviewedRx    Prescription[] @relation("RxReviewer")
   orderEvents   OrderEvent[]
+  reviewedLabels ProductLabel[] @relation("LabelReviewer")
   chats         ChatConversation[] @relation("ChatCustomer")
   assignedChats ChatConversation[] @relation("ChatPharmacist")
   chatMessages  ChatMessage[]
@@ -92,9 +93,38 @@ model Product {
 
   cartItems  CartItem[]
   orderItems OrderItem[]
+  label      ProductLabel?
 
   @@index([categoryId, isActive])
   @@index([dosageForm])
+}
+
+enum LabelStatus {
+  DRAFT
+  APPROVED
+}
+
+/// Directions and warnings from the product's pack leaflet. Drafts are only seen by staff; approved labels
+/// are shown on the product page and the chat assistant may quote them. `reviewedAt` is set only when a
+/// pharmacist checked it against our pack; labels published straight from the official leaflet have none.
+model ProductLabel {
+  productId    String      @id
+  product      Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// How to take or use it, as worded on the pack.
+  directions   String
+  /// Who shouldn't use it, and when to see a doctor.
+  warnings     String?
+  /// The leaflet it was taken from.
+  sourceUrl    String?
+  /// For the reviewing pharmacist only (e.g. how the source differs from our pack).
+  notes        String?
+  status       LabelStatus @default(DRAFT)
+  reviewedById String?     @db.Uuid
+  reviewedBy   Profile?    @relation("LabelReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  updatedAt    DateTime    @updatedAt
+
+  @@index([status])
 }
 
 /// A cart belongs to a signed-in profile, or to a guest via the `cart_id` cookie.

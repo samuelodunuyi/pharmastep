@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { isAssistantConfigured } from "@/lib/env";
 import { formatNaira } from "@/lib/format";
-import { reviewReply } from "@/lib/chat/guard";
+import { quotedLabels, reviewReply } from "@/lib/chat/guard";
 import { looksLikeEmergency, type Handover } from "@/lib/chat/triage";
 import { CATALOGUE_SOURCE, type ChatSource } from "@/lib/chat/types";
 
@@ -13,9 +13,11 @@ const MAX_STEPS = 5;
 const MAX_RECOMMENDATIONS = 3;
 const MAX_WEB_SEARCHES = 3;
 
-/** The only websites the assistant may search and cite (approved list; change it with the pharmacists). */
-// A domain also covers its subdomains, so NHS is limited to www.nhs.uk: other *.nhs.uk sites are local
-// GP practices and trusts. The others' subdomains all belong to the same organisation.
+/**
+ * The only websites the assistant may search and cite (approved list; change it with the pharmacists).
+ * A domain also covers its subdomains, so NHS is limited to www.nhs.uk: other *.nhs.uk sites are local
+ * GP practices and trusts. The others' subdomains all belong to the same organisation.
+ */
 export const TRUSTED_SITES = ["www.nhs.uk", "medlineplus.gov", "medicines.org.uk", "nafdac.gov.ng", "who.int"];
 
 const SYSTEM_PROMPT = `You are the assistant in PharmaStep's "Ask a pharmacist" chat. PharmaStep is a licensed online pharmacy in Lagos, Nigeria. Licensed pharmacists take over chats that need them.
@@ -37,7 +39,7 @@ For a mild case:
 - Before suggesting a medicine, make sure you know who it is for, their age group, how long it has been going on, and whether they take other medicines or have allergies. Ask for what's missing in one short message.
 - Base health information (what helps, self-care, warning signs) on the trusted health websites: check them with web_search before advising, and don't state medical facts you couldn't find there.
 - Only suggest products that search_products returned in this turn, and attach them with recommend_products. Never invent products, prices or stock.
-- Never give a dose, how often to take something, or a maximum amount; tell them to follow the directions on the pack. Don't name prescription-only medicines.
+- Never state a dose, how often to take something, or a maximum amount in your own words. If a product in the search results has label_directions (checked by our pharmacists), you may quote the relevant sentences exactly as written, in quotation marks, and say they're from the pack label. Quote each sentence whole, from its first word, including who it applies to (e.g. "Adults and children aged 12 years and over: ..."); a shortened quote is not allowed and won't be sent; otherwise tell them to follow the directions on the pack. Don't name prescription-only medicines.
 - Add brief self-care advice and say when they should see a pharmacist or doctor instead.
 - You don't diagnose. If asked, say you're PharmaStep's automated assistant and a pharmacist can take over at any time.
 
@@ -150,7 +152,19 @@ async function searchProducts(query: string) {
   ]);
   const products = await db.product.findMany({
     where: { isActive: true, requiresPrescription: false, stock: { gt: 0 }, OR: [...matches, { tags: { hasSome: words } }] },
-    select: { id: true, name: true, activeIngredient: true, strength: true, dosageForm: true, packSize: true, priceKobo: true, description: true, tags: true },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      activeIngredient: true,
+      strength: true,
+      dosageForm: true,
+      packSize: true,
+      priceKobo: true,
+      description: true,
+      tags: true,
+      label: { select: { status: true, directions: true, warnings: true, reviewedAt: true } },
+    },
     orderBy: { name: "asc" },
     take: 40,
   });
@@ -179,6 +193,8 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
   const found = new Set<string>();
   let recommended: string[] = [];
   let searchedCatalogue = false;
+  // Pharmacist-approved pack labels of the products found this turn: the only doses a reply may state.
+  const labels = new Map<string, { name: string; slug: string; directions: string; checked: boolean }>();
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const response = await anthropic().beta.messages.create({
@@ -218,10 +234,16 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
       const text = replyBlocks.map((b) => b.text).join("").trim();
       if (!text) return handover("The assistant gave no answer.");
 
-      const heldBack = await reviewReply(text);
+      const approved = [...labels.values()];
+      const heldBack = await reviewReply(text, approved.map((l) => l.directions));
       if (heldBack) return handover(heldBack, { note: `Held-back reply: ${text}` });
 
-      const sources = [...(searchedCatalogue ? [CATALOGUE_SOURCE] : []), ...webSources(replyBlocks)];
+      const labelSources = quotedLabels(text, approved).map((l) => ({
+        label: `Pack label: ${l.name}`,
+        url: `/products/${l.slug}`,
+        title: l.checked ? "Directions from the pack, checked by a PharmaStep pharmacist" : "Directions from the official product leaflet",
+      }));
+      const sources = [...(searchedCatalogue ? [CATALOGUE_SOURCE] : []), ...labelSources, ...webSources(replyBlocks)];
       return { type: "reply", text, productIds: recommended, sources, usage };
     }
 
@@ -231,7 +253,12 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
       if (tool.name === "search_products") {
         const products = await searchProducts((tool.input as { query: string }).query);
         searchedCatalogue = true;
-        products.forEach((p) => found.add(p.id));
+        for (const p of products) {
+          found.add(p.id);
+          if (p.label?.status === "APPROVED") {
+            labels.set(p.id, { name: p.name, slug: p.slug, directions: p.label.directions, checked: !!p.label.reviewedAt });
+          }
+        }
         const listing = products.map((p) => ({
           id: p.id,
           name: p.name,
@@ -241,6 +268,7 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
           pack: p.packSize,
           price: formatNaira(p.priceKobo),
           description: p.description?.slice(0, 300),
+          ...(p.label?.status === "APPROVED" && { label_directions: p.label.directions, label_warnings: p.label.warnings }),
         }));
         results.push({
           type: "tool_result",

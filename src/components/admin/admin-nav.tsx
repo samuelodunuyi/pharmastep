@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, LayoutDashboard, Mail, MessagesSquare, Package, ShoppingCart, Tags, Users } from "lucide-react";
+import { ClipboardCheck, FileText, LayoutDashboard, Mail, MessagesSquare, Package, ShoppingCart, Tags, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +11,7 @@ const ITEMS = [
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart, adminOnly: false },
   { href: "/admin/prescriptions", label: "Prescriptions", icon: FileText, adminOnly: false },
   { href: "/admin/chats", label: "Chats", icon: MessagesSquare, adminOnly: false },
+  { href: "/admin/labels", label: "Pack labels", icon: ClipboardCheck, adminOnly: false },
   { href: "/admin/products", label: "Products", icon: Package, adminOnly: true },
   { href: "/admin/categories", label: "Categories", icon: Tags, adminOnly: true },
   { href: "/admin/staff", label: "Staff", icon: Users, adminOnly: true },
