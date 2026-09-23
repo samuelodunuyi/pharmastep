@@ -29,7 +29,7 @@ Online pharmacy for Lagos. Next.js 16 (App Router) on Vercel, Supabase (Postgres
    ```
 3. **Paystack**: put `PAYSTACK_SECRET_KEY` in `.env` (start with `sk_test_…`). In the Paystack dashboard, set the webhook URL to `https://<your-domain>/api/paystack/webhook`.
 4. **Google Maps (optional)**: a server key with the Geocoding API and Routes API enabled prices delivery by distance, using the old site's fee bands. Without it, `DELIVERY_FLAT_FEE_NAIRA` is charged.
-5. **Chat assistant (optional)**: put `ANTHROPIC_API_KEY` in `.env`. It uses `claude-opus-5` unless `ANTHROPIC_MODEL` says otherwise. Without a key the chat still works, and every conversation goes straight to the pharmacists.
+5. **Chat assistant (optional)**: put `ANTHROPIC_API_KEY` in `.env`. It uses Claude Opus 5.5 (`claude-opus-5-5`) unless `ANTHROPIC_MODEL` says otherwise. Without a key the chat still works, and every conversation goes straight to the pharmacists.
 6. Create the first admin: `npx tsx scripts/create-admin.ts you@yourdomain.com "Your Name"`. It prints a temporary password; sign in at `/admin/login` and choose your own. Add more staff from `/admin/staff`. Staff accounts are separate from customer accounts. The public sign-up only creates customers.
 
 ## Moving data from Firebase

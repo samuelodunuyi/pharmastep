@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { formatNaira } from "@/lib/format";
 import type { Handover } from "@/lib/chat/triage";
 
-const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5";
+const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5-5";
 /** Model round trips per customer message (searching, then answering, usually takes 2–3). */
 const MAX_STEPS = 5;
 const MAX_RECOMMENDATIONS = 3;
@@ -129,7 +129,8 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
   for (let step = 0; step < MAX_STEPS; step++) {
     const response = await anthropic().beta.messages.create({
       model: MODEL,
-      max_tokens: 4096,
+      // Thinking counts toward this too; running out hands the chat to a pharmacist.
+      max_tokens: 16_000,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       output_config: { effort: "medium" },
