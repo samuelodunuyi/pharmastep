@@ -13,21 +13,21 @@ function createClient() {
 
 type Client = ReturnType<typeof createClient>;
 
-// Reuse one client per process; in dev, survive hot reloads. Recreated when DATABASE_URL changes
-// or when `prisma generate` produces a new client, so neither needs a dev server restart.
-const globalForPrisma = globalThis as unknown as { prisma?: Client; prismaUrl?: string; prismaClass?: unknown };
+// One client per copy of the PrismaClient class, kept on globalThis so dev hot reloads reuse it.
+// Server bundles can each carry their own copy of the class, so a client is never shared across
+// copies or closed by another one. `prisma generate` produces a new class, which gets a fresh client
+// without a dev server restart; a changed DATABASE_URL replaces that class's client.
+const globalForPrisma = globalThis as unknown as { prismaClients?: Map<unknown, { url?: string; client: Client }> };
+const clients = (globalForPrisma.prismaClients ??= new Map());
 
 function getClient() {
   const url = process.env.DATABASE_URL;
-  const stale = globalForPrisma.prismaUrl !== url || globalForPrisma.prismaClass !== PrismaClient;
-  if (!globalForPrisma.prisma || stale) {
-    const previous = globalForPrisma.prisma;
-    globalForPrisma.prisma = createClient();
-    globalForPrisma.prismaUrl = url;
-    globalForPrisma.prismaClass = PrismaClient;
-    void previous?.$disconnect().catch(() => {});
-  }
-  return globalForPrisma.prisma;
+  const entry = clients.get(PrismaClient);
+  if (entry?.url === url) return entry.client;
+  const client = createClient();
+  clients.set(PrismaClient, { url, client });
+  void entry?.client.$disconnect().catch(() => {});
+  return client;
 }
 
 /** Created on first use, so a missing DATABASE_URL fails the query that needs it, not every import. */
