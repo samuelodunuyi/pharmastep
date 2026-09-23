@@ -8,6 +8,8 @@ import { ensureProfile } from "@/lib/auth";
 import { mergeGuestCart } from "@/lib/cart";
 import { emailSchema, fieldErrorsFrom, fullNameSchema, phoneSchema, safeRedirectPath } from "@/lib/validation";
 import type { FormState } from "@/lib/form-state";
+import { MIN_PASSWORD_LENGTH } from "@/lib/passwords";
+import { allowSignInAttempt, rateLimit, rateLimitByIp, TOO_MANY_ATTEMPTS } from "@/lib/rate-limit";
 
 const site = () => process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -15,6 +17,7 @@ export async function signInAction(_prev: FormState, formData: FormData): Promis
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { error: "Enter your email and password." };
+  if (!(await allowSignInAttempt("customer", email))) return { error: TOO_MANY_ATTEMPTS };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -37,7 +40,7 @@ const SignUpSchema = z
     fullName: fullNameSchema,
     email: emailSchema,
     phone: phoneSchema,
-    password: z.string().min(8, "Password must be at least 8 characters."),
+    password: z.string().min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`),
     confirm: z.string(),
   })
   .refine((d) => d.password === d.confirm, { message: "Passwords don’t match.", path: ["confirm"] });
@@ -52,6 +55,7 @@ export async function signUpAction(_prev: FormState, formData: FormData): Promis
   });
   if (!parsed.success) return { error: "Please fix the highlighted fields.", fieldErrors: fieldErrorsFrom(parsed.error) };
   const { fullName, email, phone, password } = parsed.data;
+  if (!(await rateLimitByIp("sign-up", { limit: 5, windowSeconds: 60 * 60 }))) return { error: TOO_MANY_ATTEMPTS };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp({
@@ -91,6 +95,10 @@ export async function signInWithGoogleAction(formData: FormData) {
 export async function forgotPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const email = String(formData.get("email") ?? "").trim();
   if (!email) return { error: "Enter your email address." };
+  const allowed =
+    (await rateLimitByIp("password-reset", { limit: 10, windowSeconds: 60 * 60 })) &&
+    (await rateLimit("password-reset-account", email, { limit: 3, windowSeconds: 60 * 60 }));
+  if (!allowed) return { error: TOO_MANY_ATTEMPTS };
   const supabase = await createSupabaseServerClient();
   await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${site()}/auth/callback?next=/reset-password`,
@@ -101,7 +109,7 @@ export async function forgotPasswordAction(_prev: FormState, formData: FormData)
 
 export async function resetPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const password = String(formData.get("password") ?? "");
-  if (password.length < 8) return { error: "Password must be at least 8 characters." };
+  if (password.length < MIN_PASSWORD_LENGTH) return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` };
   if (password !== formData.get("confirm")) return { error: "Passwords don’t match." };
 
   const supabase = await createSupabaseServerClient();

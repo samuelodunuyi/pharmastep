@@ -14,7 +14,7 @@ const LabelSchema = z.object({
   productId: z.string().min(1),
   directions: z.string().trim().min(10, "Enter the directions as written on the pack.").max(3000),
   warnings: optionalText(3000),
-  sourceUrl: optionalText(500).pipe(z.url("Enter a full link, starting with https://").nullable()),
+  sourceUrl: optionalText(500).pipe(z.url({ protocol: /^https$/, error: "Enter a full link, starting with https://" }).nullable()),
   notes: optionalText(2000),
   decision: z.enum(["draft", "approve"]),
 });

@@ -5,12 +5,13 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentProfile } from "@/lib/auth";
 import { getCart, summarizeCart } from "@/lib/cart";
-import { quoteDelivery, type DeliveryQuote } from "@/lib/delivery";
+import { flatFee, quoteDelivery, type DeliveryQuote } from "@/lib/delivery";
 import { newOrderReference, startPayment } from "@/lib/orders";
 import { uploadPrescription, validatePrescriptionFile } from "@/lib/storage";
 import { emailSchema, fieldErrorsFrom, fullNameSchema, phoneSchema } from "@/lib/validation";
 import type { FormState } from "@/lib/form-state";
 import { isPaymentsConfigured, isStorageConfigured } from "@/lib/env";
+import { rateLimitByIp, TOO_MANY_ATTEMPTS } from "@/lib/rate-limit";
 
 const CheckoutSchema = z.object({
   email: emailSchema,
@@ -22,6 +23,9 @@ const CheckoutSchema = z.object({
 });
 
 export async function quoteDeliveryAction(address: string, city: string): Promise<DeliveryQuote> {
+  // Each lookup is a paid Google Maps call. Past the limit, the preview shows the flat fee;
+  // the order itself is still priced from the address.
+  if (!(await rateLimitByIp("delivery-quote", { limit: 30, windowSeconds: 60 * 60 }))) return flatFee();
   return quoteDelivery(String(address).slice(0, 200), String(city).slice(0, 60));
 }
 
@@ -32,6 +36,7 @@ export async function placeOrderAction(_prev: FormState, formData: FormData): Pr
   if (!isPaymentsConfigured()) {
     return { error: `Online payment isn’t available right now. ${ORDER_BY_CHAT}` };
   }
+  if (!(await rateLimitByIp("place-order", { limit: 10, windowSeconds: 60 * 60 }))) return { error: TOO_MANY_ATTEMPTS };
 
   const parsed = CheckoutSchema.safeParse({
     email: formData.get("email"),
@@ -62,7 +67,7 @@ export async function placeOrderAction(_prev: FormState, formData: FormData): Pr
   const prescription = formData.get("prescription");
   const rxFile = prescription instanceof File ? prescription : null;
   if (needsPrescription) {
-    const rxError = validatePrescriptionFile(rxFile);
+    const rxError = await validatePrescriptionFile(rxFile);
     if (rxError) fieldErrors.prescription = rxError;
     if (formData.get("consent") !== "on") {
       fieldErrors.consent = "Please confirm the prescription is valid and issued to the patient.";

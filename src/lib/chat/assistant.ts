@@ -297,16 +297,16 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
 
 /**
  * The full decision for a customer message, in order: possible-emergency wording goes straight to a
- * pharmacist without asking the model; so does everything when the assistant is off or the chat has
- * reached its reply limit; the rest goes to the assistant. Used by the chat and by evals/chat.
+ * pharmacist without asking the model; so does everything when the assistant is off or `unavailable`
+ * gives a reason (e.g. a usage limit); the rest goes to the assistant. Used by the chat and by evals/chat.
  */
-export async function triageAndAnswer(history: AssistantTurn[], { replyLimitReached = false } = {}): Promise<AssistantOutcome> {
+export async function triageAndAnswer(history: AssistantTurn[], { unavailable }: { unavailable?: string } = {}): Promise<AssistantOutcome> {
   const latest = history.at(-1)?.content ?? "";
   const skip = (handover: Handover): AssistantOutcome => ({ type: "handover", handover, usage: noUsage() });
   if (looksLikeEmergency(latest)) {
     return skip({ severity: "EMERGENCY", reason: "Message mentions possible emergency symptoms.", note: latest });
   }
   if (!isAssistantConfigured()) return skip({ severity: null, reason: "The assistant isn’t switched on." });
-  if (replyLimitReached) return skip({ severity: null, reason: "Long conversation with the assistant." });
+  if (unavailable) return skip({ severity: null, reason: unavailable });
   return runAssistant(history);
 }

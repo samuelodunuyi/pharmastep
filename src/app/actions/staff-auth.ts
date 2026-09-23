@@ -7,6 +7,7 @@ import { isStaff, requireStaff } from "@/lib/auth";
 import { MIN_PASSWORD_LENGTH } from "@/lib/passwords";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/form-state";
+import { allowSignInAttempt, TOO_MANY_ATTEMPTS } from "@/lib/rate-limit";
 
 const WRONG_DETAILS = "Email or password is incorrect.";
 
@@ -14,6 +15,7 @@ export async function staffSignInAction(_prev: FormState, formData: FormData): P
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { error: "Enter your email and password." };
+  if (!(await allowSignInAttempt("staff", email))) return { error: TOO_MANY_ATTEMPTS };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });

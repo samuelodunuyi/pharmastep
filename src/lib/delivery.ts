@@ -22,7 +22,7 @@ function feeForDistance(km: number) {
   return 3500;
 }
 
-function flatFee(): DeliveryQuote {
+export function flatFee(): DeliveryQuote {
   return { feeKobo: Number(process.env.DELIVERY_FLAT_FEE_NAIRA ?? 2000) * 100, distanceKm: null, located: false };
 }
 

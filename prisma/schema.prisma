@@ -128,8 +128,9 @@ model ProductLabel {
 }
 
 /// A cart belongs to a signed-in profile, or to a guest via the `cart_id` cookie.
+/// The id is a random UUID because a guest's cookie holds it (cuids aren't meant to be secret).
 model Cart {
-  id        String     @id @default(cuid())
+  id        String     @id @default(uuid())
   profileId String?    @unique @db.Uuid
   profile   Profile?   @relation(fields: [profileId], references: [id], onDelete: Cascade)
   items     CartItem[]
@@ -173,8 +174,8 @@ model Order {
   paystackTxnId      String?
   /// Cart the order was placed from; emptied once payment is confirmed.
   sourceCartId       String?
-  /// Lets guests view their order without an account.
-  trackingToken      String             @unique @default(cuid())
+  /// Lets guests view their order without an account. A random UUID, since it grants access to their details.
+  trackingToken      String             @unique @default(uuid())
   isLegacy           Boolean            @default(false)
   legacyStatus       String?
   firebaseId         String?            @unique
@@ -298,6 +299,17 @@ model ChatMessage {
   createdAt      DateTime         @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+/// One row per rate-limited request (a sign-in attempt, a contact message...), counted within a time window.
+model RateLimitHit {
+  id        BigInt   @id @default(autoincrement())
+  /// SHA-256 of the action and who made the request (IP address or email), so neither is stored.
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@index([createdAt])
 }
 
 model ContactMessage {

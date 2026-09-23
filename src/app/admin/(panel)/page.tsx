@@ -2,10 +2,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionHeader } from "@/components/ui/section-header";
 import { OrdersTable } from "@/components/admin/orders-table";
 import { StatCard } from "@/components/admin/stat-card";
+import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatNaira } from "@/lib/format";
 
 export default async function AdminDashboard() {
+  await requireStaff();
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const [toReview, toFulfil, lowStock, revenue, recent] = await Promise.all([
     db.order.count({ where: { status: "PAID", prescriptionStatus: "PENDING_REVIEW" } }),

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireProfile } from "@/lib/auth";
 import { emailSchema, fieldErrorsFrom, fullNameSchema, phoneSchema } from "@/lib/validation";
 import type { FormState } from "@/lib/form-state";
+import { rateLimitByIp, TOO_MANY_ATTEMPTS } from "@/lib/rate-limit";
 
 const ProfileSchema = z.object({
   fullName: fullNameSchema,
@@ -41,6 +42,7 @@ export async function contactAction(_prev: FormState, formData: FormData): Promi
   if (formData.get("website")) return thanks;
   const parsed = ContactSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed.error) };
+  if (!(await rateLimitByIp("contact", { limit: 5, windowSeconds: 60 * 60 }))) return { error: TOO_MANY_ATTEMPTS };
   await db.contactMessage.create({ data: parsed.data });
   return thanks;
 }

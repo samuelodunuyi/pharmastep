@@ -1,8 +1,9 @@
 import "server-only";
-import { createHash, randomBytes } from "node:crypto";
-import { cookies, headers } from "next/headers";
+import { randomBytes } from "node:crypto";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { getCurrentProfile } from "@/lib/auth";
+import { clientIp, hashed, rateLimit, rateLimitByIp } from "@/lib/rate-limit";
 import { triageAndAnswer, type AssistantOutcome, type AssistantTurn } from "@/lib/chat/assistant";
 import { CHAT_NOTICES, handoverNotice, looksLikeEmergency, type Handover } from "@/lib/chat/triage";
 import type { ChatMessageView, ChatProduct, ChatSource, ChatState, ChatSummary, ChatView } from "@/lib/chat/types";
@@ -15,6 +16,8 @@ const MESSAGES_PER_MINUTE = 6;
 const NEW_CHATS_PER_HOUR = 5;
 /** After this many assistant replies, a pharmacist takes over rather than the chat going on indefinitely. */
 const MAX_ASSISTANT_REPLIES = 15;
+/** Assistant replies per day across all customers, a ceiling on the Anthropic bill. Past it, chats go to a pharmacist. */
+const ASSISTANT_DAILY_LIMIT = Number(process.env.ASSISTANT_DAILY_LIMIT) || 500;
 /** How much of the conversation the assistant reads. */
 const HISTORY_LIMIT = 30;
 const HISTORY_PAGE = 50;
@@ -63,13 +66,9 @@ async function guestKeyForNewChat() {
   return key;
 }
 
-async function clientIpHash() {
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim();
-  return ip ? createHash("sha256").update(ip).digest("hex") : null;
-}
-
 async function startChat() {
-  const ipHash = await clientIpHash();
+  const ip = await clientIp();
+  const ipHash = ip ? hashed(ip) : null;
   if (ipHash) {
     const recent = await db.chatConversation.count({
       where: { ipHash, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
@@ -148,9 +147,15 @@ async function assistantHistory(chatId: string): Promise<AssistantTurn[]> {
 
 async function answerWithAssistant(chat: ChatConversation) {
   const replies = await db.chatMessage.count({ where: { conversationId: chat.id, role: "ASSISTANT" } });
+  const unavailable =
+    replies >= MAX_ASSISTANT_REPLIES
+      ? "Long conversation with the assistant."
+      : !(await rateLimit("assistant-reply", "all", { limit: ASSISTANT_DAILY_LIMIT, windowSeconds: 24 * 60 * 60 }))
+        ? "The assistant reached its daily limit."
+        : undefined;
   let outcome: AssistantOutcome;
   try {
-    outcome = await triageAndAnswer(await assistantHistory(chat.id), { replyLimitReached: replies >= MAX_ASSISTANT_REPLIES });
+    outcome = await triageAndAnswer(await assistantHistory(chat.id), { unavailable });
   } catch (err) {
     console.error("Chat assistant failed", err);
     return handOver(chat.id, { severity: null, reason: "The assistant was unavailable." });
@@ -175,6 +180,9 @@ export async function sendCustomerMessage(chatId: string | undefined, text: stri
     where: { conversationId: chat.id, role: "CUSTOMER", createdAt: { gte: new Date(Date.now() - 60 * 1000) } },
   });
   if (recent >= MESSAGES_PER_MINUTE) throw new ChatError("You’re sending messages too quickly. Please wait a moment.", 429);
+  if (!(await rateLimitByIp("chat-message", { limit: 40, windowSeconds: 60 * 60 }))) {
+    throw new ChatError("You’ve sent a lot of messages in the last hour. Please try again later.", 429);
+  }
 
   if (chat.status === "CLOSED") chat = await reopen(chat);
   await addMessage(chat.id, "CUSTOMER", text);
