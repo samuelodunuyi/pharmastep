@@ -17,6 +17,7 @@ export const OPTIONAL_ENV: EnvVar[] = [
   { name: "PAYSTACK_SECRET_KEY", purpose: "Taking payments at checkout" },
   { name: "SUPABASE_SECRET_KEY", purpose: "Prescription and product image uploads" },
   { name: "GOOGLE_MAPS_API_KEY", purpose: "Distance-based delivery fees (a flat fee is used without it)" },
+  { name: "ANTHROPIC_API_KEY", purpose: "The chat assistant (without it, every chat goes straight to a pharmacist)" },
 ];
 
 // NEXT_PUBLIC_ values must be read with literal names so Next.js can inline them in client bundles.
@@ -52,3 +53,4 @@ export function isSupabaseConfigured() {
 
 export const isPaymentsConfigured = () => !!read("PAYSTACK_SECRET_KEY");
 export const isStorageConfigured = () => isSupabaseConfigured() && !!read("SUPABASE_SECRET_KEY");
+export const isAssistantConfigured = () => !!read("ANTHROPIC_API_KEY");

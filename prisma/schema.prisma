@@ -50,6 +50,9 @@ model Profile {
   orders        Order[]
   reviewedRx    Prescription[] @relation("RxReviewer")
   orderEvents   OrderEvent[]
+  chats         ChatConversation[] @relation("ChatCustomer")
+  assignedChats ChatConversation[] @relation("ChatPharmacist")
+  chatMessages  ChatMessage[]
 }
 
 model Category {
@@ -195,6 +198,73 @@ model Prescription {
   reviewNote  String?
   reviewedAt  DateTime?
   createdAt   DateTime           @default(now())
+}
+
+enum ChatStatus {
+  /// The assistant is answering.
+  BOT
+  /// Handed over; waiting for a pharmacist to pick it up.
+  WAITING
+  WITH_PHARMACIST
+  CLOSED
+}
+
+enum ChatSeverity {
+  MODERATE
+  SEVERE
+  EMERGENCY
+}
+
+enum ChatRole {
+  CUSTOMER
+  ASSISTANT
+  PHARMACIST
+  /// Notices from the app itself, e.g. "A pharmacist has joined".
+  SYSTEM
+}
+
+/// "Ask a pharmacist" chat. Starts with the assistant; moderate or worse cases go to a pharmacist.
+model ChatConversation {
+  id             String        @id @default(cuid())
+  /// Secret kept in the customer's `chat_token` cookie, so guests can chat without an account.
+  accessToken    String        @unique
+  profileId      String?       @db.Uuid
+  profile        Profile?      @relation("ChatCustomer", fields: [profileId], references: [id], onDelete: SetNull)
+  /// SHA-256 of the client IP, only used to rate-limit new chats.
+  ipHash         String?
+  status         ChatStatus    @default(BOT)
+  severity       ChatSeverity?
+  /// Why it was handed over, and a summary for the pharmacist.
+  handoverReason String?
+  handoverNote   String?
+  pharmacistId   String?       @db.Uuid
+  pharmacist     Profile?      @relation("ChatPharmacist", fields: [pharmacistId], references: [id], onDelete: SetNull)
+  handedOverAt   DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  messages ChatMessage[]
+
+  @@index([status, handedOverAt])
+  @@index([profileId, createdAt])
+  @@index([ipHash, createdAt])
+}
+
+model ChatMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           ChatRole
+  content        String
+  /// Products the assistant suggested with this message.
+  productIds     String[]
+  /// The pharmacist who wrote it.
+  authorId       String?          @db.Uuid
+  author         Profile?         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+
+  @@index([conversationId, createdAt])
 }
 
 model ContactMessage {

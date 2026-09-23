@@ -9,7 +9,8 @@ Online pharmacy for Lagos. Next.js 16 (App Router) on Vercel, Supabase (Postgres
 - **Checkout**: guest or signed in. The server prices the order and works out the delivery fee from the address. Payment goes through Paystack's hosted page, and the order is marked paid only after Paystack confirms it (redirect and webhook, both verified with the secret key).
 - **Prescriptions**: Rx items need an uploaded prescription (private bucket). Pharmacists approve it, or reject it, which refunds automatically.
 - **Order tracking**: customers see a status timeline; guests look orders up by number and email
-- **Admin** (`/admin`): orders, prescription queue, products and images, categories, staff roles, contact messages
+- **Ask a pharmacist chat**: an in-app chat on every storefront page. An assistant (Claude) handles mild, over-the-counter cases and suggests only in-stock, non-prescription products from the catalogue. Anything moderate or worse, emergency wording, or a customer who asks goes to a pharmacist, who takes over from `/admin/chats`.
+- **Admin** (`/admin`): orders, prescription queue, chats, products and images, categories, staff roles, contact messages
 
 ## First-time setup
 
@@ -28,7 +29,8 @@ Online pharmacy for Lagos. Next.js 16 (App Router) on Vercel, Supabase (Postgres
    ```
 3. **Paystack**: put `PAYSTACK_SECRET_KEY` in `.env` (start with `sk_test_…`). In the Paystack dashboard, set the webhook URL to `https://<your-domain>/api/paystack/webhook`.
 4. **Google Maps (optional)**: a server key with the Geocoding API and Routes API enabled prices delivery by distance, using the old site's fee bands. Without it, `DELIVERY_FLAT_FEE_NAIRA` is charged.
-5. Create the first admin: `npx tsx scripts/create-admin.ts you@yourdomain.com "Your Name"`. It prints a temporary password; sign in at `/admin/login` and choose your own. Add more staff from `/admin/staff`. Staff accounts are separate from customer accounts. The public sign-up only creates customers.
+5. **Chat assistant (optional)**: put `ANTHROPIC_API_KEY` in `.env`. It uses `claude-opus-5` unless `ANTHROPIC_MODEL` says otherwise. Without a key the chat still works, and every conversation goes straight to the pharmacists.
+6. Create the first admin: `npx tsx scripts/create-admin.ts you@yourdomain.com "Your Name"`. It prints a temporary password; sign in at `/admin/login` and choose your own. Add more staff from `/admin/staff`. Staff accounts are separate from customer accounts. The public sign-up only creates customers.
 
 ## Moving data from Firebase
 
@@ -55,7 +57,7 @@ Before going live: switch to the Paystack live secret key, restrict the Google M
   - `ActionForm`: every form that calls a server action
   - `TextField` / `TextareaField` / `FileField` / `CheckboxField`, plus `FormMessage` and `SubmitButton`
   - `QuantityStepper`, `EmptyState`, `PageHeader`, `SectionHeader`, `Pager`, `ConfirmSubmitButton`
-- `src/components/<area>/` holds the shop-specific pieces, built only from `ui/`. The areas are `layout`, `brand`, `product`, `cart`, `order`, `checkout`, `auth`, `forms` and `admin`.
+- `src/components/<area>/` holds the shop-specific pieces, built only from `ui/`. The areas are `layout`, `brand`, `product`, `cart`, `order`, `checkout`, `auth`, `forms`, `chat` and `admin`.
 - `src/lib/site.ts` holds contact details and links; `src/lib/validation.ts` holds the phone/email rules and the safe-redirect check.
 - Colours are theme tokens in `src/app/globals.css`: `primary` is navy and `brand` is magenta. Use `bg-primary`, `text-brand`, `variant="brand"` and so on, never raw hex values.
 
@@ -66,4 +68,5 @@ Before writing new markup, check whether a component already exists. If a patter
 - All money is stored in **kobo** (integers).
 - The app reads and writes the database only through Prisma on the server. Row-level security is on for every table with no policies, so Supabase's public REST API can't read or change data using the publishable key.
 - Prescription files live in a private bucket. Staff view them through signed links that expire after 10 minutes.
+- Chat triage lives in `src/lib/chat/`: `triage.ts` has the emergency phrases (checked before the model, so they never depend on it) and the fixed handover messages; `assistant.ts` has the prompt and tools; `conversation.ts` handles storage, rate limits and handover. The model never writes what the customer is told when a chat is handed over.
 - Old URLs (`/product/<id>`, `/category/<id>`, `/auth/login`, `/productType/…`) redirect to the new pages.
