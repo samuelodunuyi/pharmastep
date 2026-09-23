@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { isStaff, requireStaff } from "@/lib/auth";
 import { nairaToKobo, slugify } from "@/lib/format";
 import { generateTempPassword } from "@/lib/passwords";
+import { emailOrderUpdate } from "@/lib/email";
 import { refundTransaction } from "@/lib/paystack";
 import { uploadProductImage } from "@/lib/storage";
 import { randomCode } from "@/lib/orders";
@@ -44,10 +45,12 @@ export async function updateOrderStatusAction(_prev: FormState, formData: FormDa
     DELIVERED: "Your order has been delivered. Get well soon!",
   };
 
+  const customerNote = note || defaultNote[status];
   await db.$transaction([
     db.order.update({ where: { id: orderId }, data: { status } }),
-    db.orderEvent.create({ data: { orderId, status, note: note || defaultNote[status], actorId: staff.id } }),
+    db.orderEvent.create({ data: { orderId, status, note: customerNote, actorId: staff.id } }),
   ]);
+  await emailOrderUpdate(orderId, customerNote);
   revalidatePath(`/admin/orders/${orderId}`);
   return { message: "Order updated." };
 }
@@ -58,15 +61,24 @@ export async function addOrderNoteAction(_prev: FormState, formData: FormData): 
   const note = String(formData.get("note") ?? "").trim();
   if (!note) return { error: "Write a note first." };
   await db.orderEvent.create({ data: { orderId, note, actorId: staff.id } });
+  await emailOrderUpdate(orderId, note);
   revalidatePath(`/admin/orders/${orderId}`);
-  return { message: "Update posted. The customer can see it on their order page." };
+  return { message: "Update posted. The customer can see it on their order page and gets it by email." };
 }
 
+/**
+ * Cancels an order, refunding it through Paystack if it was paid. `note` is for staff; `customerMessage`
+ * is what the customer is told (null when a failed refund needs staff to step in first).
+ */
 async function refundOrder(orderId: string, reason: string, actorId: string) {
   const order = await db.order.findUniqueOrThrow({ where: { id: orderId } });
   if (!order.paidAt || !order.paystackRef) {
-    await db.order.update({ where: { id: orderId }, data: { status: "CANCELLED" } });
-    return { refunded: false, note: "Order cancelled (it was not paid)." };
+    const customerMessage = `Your order has been cancelled. ${reason}`;
+    await db.$transaction([
+      db.order.update({ where: { id: orderId }, data: { status: "CANCELLED" } }),
+      db.orderEvent.create({ data: { orderId, status: "CANCELLED", note: customerMessage, actorId } }),
+    ]);
+    return { refunded: false, note: "Order cancelled (it was not paid).", customerMessage };
   }
   try {
     await refundTransaction(order.paystackRef, reason);
@@ -80,13 +92,13 @@ async function refundOrder(orderId: string, reason: string, actorId: string) {
         db.product.update({ where: { id: i.productId! }, data: { stock: { increment: i.quantity } } }),
       ),
     ]);
-    return { refunded: true, note: "Refund issued via Paystack." };
+    return { refunded: true, note: "Refund issued via Paystack.", customerMessage: `Your order has been cancelled and a full refund was issued. ${reason}` };
   } catch (err) {
     console.error("Refund failed", err);
     await db.orderEvent.create({
-      data: { orderId, note: `Automatic refund failed. Refund manually in the Paystack dashboard. (${reason})`, actorId },
+      data: { orderId, note: `Automatic refund failed. Refund manually in the Paystack dashboard. (${reason})`, actorId, internal: true },
     });
-    return { refunded: false, note: "Paystack refund failed. Please refund manually from the Paystack dashboard." };
+    return { refunded: false, note: "Paystack refund failed. Please refund manually from the Paystack dashboard.", customerMessage: null };
   }
 }
 
@@ -126,9 +138,15 @@ export async function reviewPrescriptionAction(_prev: FormState, formData: FormD
   ]);
 
   let message = approved ? "Prescription approved." : "Prescription rejected.";
-  if (!approved) {
+  if (approved) {
+    await emailOrderUpdate(orderId, "Your prescription was approved by our pharmacist. We're preparing your order.");
+  } else {
     const result = await refundOrder(orderId, "Prescription not approved.", staff.id);
     message += ` ${result.note}`;
+    const outcome = result.customerMessage ?? "Your order will be cancelled and we'll contact you about your refund.";
+    await emailOrderUpdate(orderId, `Your prescription could not be approved: ${note}
+
+${outcome}`);
   }
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath("/admin/prescriptions");
@@ -145,6 +163,7 @@ export async function cancelOrderAction(_prev: FormState, formData: FormData): P
     return { error: "This order can’t be cancelled." };
   }
   const result = await refundOrder(orderId, reason, staff.id);
+  if (result.customerMessage) await emailOrderUpdate(orderId, result.customerMessage);
   revalidatePath(`/admin/orders/${orderId}`);
   return result.refunded ? { message: result.note } : { error: result.note };
 }

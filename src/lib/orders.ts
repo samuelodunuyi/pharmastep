@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
+import { emailOrderUpdate } from "@/lib/email";
 import { initializeTransaction, verifyTransaction } from "@/lib/paystack";
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -61,11 +62,16 @@ export async function confirmPayment(paystackRef: string): Promise<ConfirmResult
       data: {
         orderId: order.id,
         note: `Payment amount mismatch: paid ${txn.amount} kobo ${txn.currency}, expected ${order.totalKobo} kobo NGN. Needs manual review.`,
+        internal: true,
       },
     });
     return { ok: false, reason: "Payment amount did not match the order. Our team will contact you.", orderId: order.id };
   }
 
+  const paidNote =
+    order.prescriptionStatus === "PENDING_REVIEW"
+      ? "Payment received. A pharmacist will review your prescription."
+      : "Payment received. We're preparing your order.";
   const alreadyPaid = await db.$transaction(async (tx) => {
     // Conditional update so two concurrent confirmations can't both succeed.
     const updated = await tx.order.updateMany({
@@ -86,10 +92,7 @@ export async function confirmPayment(paystackRef: string): Promise<ConfirmResult
       data: {
         orderId: order.id,
         status: "PAID",
-        note:
-          order.prescriptionStatus === "PENDING_REVIEW"
-            ? "Payment received. A pharmacist will review your prescription."
-            : "Payment received. We're preparing your order.",
+        note: paidNote,
       },
     });
     if (order.sourceCartId) {
@@ -99,6 +102,8 @@ export async function confirmPayment(paystackRef: string): Promise<ConfirmResult
     return false;
   });
 
+  // Only the confirmation that actually marked it paid sends the email (the webhook and redirect can both arrive).
+  if (!alreadyPaid) await emailOrderUpdate(order.id, `Thank you for your order. ${paidNote}`);
   return { ok: true, orderId: order.id, alreadyPaid };
 }
 

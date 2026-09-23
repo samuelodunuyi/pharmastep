@@ -35,7 +35,7 @@ export function OrderProgress({ status }: { status: string }) {
   );
 }
 
-export function OrderEvents({ events }: { events: { id: string; note: string; createdAt: Date; actorName?: string | null }[] }) {
+export function OrderEvents({ events }: { events: { id: string; note: string; createdAt: Date; actorName?: string | null; internal?: boolean }[] }) {
   return (
     <ol className="relative space-y-4 border-l pl-5">
       {events.map((e) => (
@@ -45,6 +45,7 @@ export function OrderEvents({ events }: { events: { id: string; note: string; cr
           <p className="text-xs text-muted-foreground">
             {formatDate(e.createdAt)}
             {e.actorName && ` · ${e.actorName}`}
+            {e.internal && " · Staff only"}
           </p>
         </li>
       ))}

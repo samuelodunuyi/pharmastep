@@ -28,7 +28,7 @@ export default async function OrderPage(props: PageProps<"/orders/[id]">) {
       where: { id },
       include: {
         items: { include: { product: { select: { slug: true } } } },
-        events: { orderBy: { createdAt: "desc" } },
+        events: { where: { internal: false }, orderBy: { createdAt: "desc" } },
         prescription: { select: { reviewNote: true } },
       },
     }),

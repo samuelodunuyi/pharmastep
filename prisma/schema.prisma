@@ -210,6 +210,8 @@ model OrderEvent {
   order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   status    OrderStatus?
   note      String
+  /// Seen by staff only (e.g. a failed refund to sort out), never on the customer's order page.
+  internal  Boolean      @default(false)
   actorId   String?      @db.Uuid
   actor     Profile?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
   createdAt DateTime     @default(now())
