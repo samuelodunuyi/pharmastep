@@ -15,8 +15,8 @@ export type ChatProduct = {
   stock: number;
 };
 
-/** A place an assistant reply took information from, shown as a pill. `url` makes it a link. */
-export type ChatSource = { label: string; url?: string };
+/** A place an assistant reply took information from, shown as a pill. `url` makes it a link; `title` is the hover text. */
+export type ChatSource = { label: string; url?: string; title?: string };
 
 /** Set on a reply that used the product search. */
 export const CATALOGUE_SOURCE: ChatSource = { label: "PharmaStep catalogue", url: "/products" };

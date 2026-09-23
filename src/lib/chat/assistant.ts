@@ -1,14 +1,22 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
+import { isAssistantConfigured } from "@/lib/env";
 import { formatNaira } from "@/lib/format";
-import type { Handover } from "@/lib/chat/triage";
+import { reviewReply } from "@/lib/chat/guard";
+import { looksLikeEmergency, type Handover } from "@/lib/chat/triage";
 import { CATALOGUE_SOURCE, type ChatSource } from "@/lib/chat/types";
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-opus-5-5";
 /** Model round trips per customer message (searching, then answering, usually takes 2–3). */
 const MAX_STEPS = 5;
 const MAX_RECOMMENDATIONS = 3;
+const MAX_WEB_SEARCHES = 3;
+
+/** The only websites the assistant may search and cite (approved list; change it with the pharmacists). */
+// A domain also covers its subdomains, so NHS is limited to www.nhs.uk: other *.nhs.uk sites are local
+// GP practices and trusts. The others' subdomains all belong to the same organisation.
+export const TRUSTED_SITES = ["www.nhs.uk", "medlineplus.gov", "medicines.org.uk", "nafdac.gov.ng", "who.int"];
 
 const SYSTEM_PROMPT = `You are the assistant in PharmaStep's "Ask a pharmacist" chat. PharmaStep is a licensed online pharmacy in Lagos, Nigeria. Licensed pharmacists take over chats that need them.
 
@@ -27,7 +35,9 @@ Severity: "moderate" needs a pharmacist's judgement but isn't urgent; "severe" m
 
 For a mild case:
 - Before suggesting a medicine, make sure you know who it is for, their age group, how long it has been going on, and whether they take other medicines or have allergies. Ask for what's missing in one short message.
-- Only suggest products that search_products returned in this turn, and attach them with recommend_products. Never invent products, prices, stock, doses or medical facts. Tell them to follow the dosing on the pack.
+- Base health information (what helps, self-care, warning signs) on the trusted health websites: check them with web_search before advising, and don't state medical facts you couldn't find there.
+- Only suggest products that search_products returned in this turn, and attach them with recommend_products. Never invent products, prices or stock.
+- Never give a dose, how often to take something, or a maximum amount; tell them to follow the directions on the pack. Don't name prescription-only medicines.
 - Add brief self-care advice and say when they should see a pharmacist or doctor instead.
 - You don't diagnose. If asked, say you're PharmaStep's automated assistant and a pharmacist can take over at any time.
 
@@ -35,7 +45,10 @@ Style: warm, plain English, short. Two to five sentences, no headings, lists or 
 
 Latency-sensitive; begin your visible answer immediately.`;
 
-const TOOLS: Anthropic.Beta.BetaTool[] = [
+const TOOLS: Anthropic.Beta.BetaToolUnion[] = [
+  // The basic search version: the newer one filters pages through code first and then returns no citations,
+  // and citations are what the source pills are built from.
+  { type: "web_search_20250305", name: "web_search", allowed_domains: TRUSTED_SITES, max_uses: MAX_WEB_SEARCHES },
   {
     name: "search_products",
     description:
@@ -82,9 +95,42 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
 const SEVERITY = { moderate: "MODERATE", severe: "SEVERE", emergency: "EMERGENCY" } as const;
 
 export type AssistantTurn = { role: "user" | "assistant"; content: string };
+/** Tokens and searches used for one customer message, for cost tracking (see evals/chat). */
+export type AssistantUsage = { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; webSearches: number };
 export type AssistantOutcome =
-  | { type: "reply"; text: string; productIds: string[]; sources: ChatSource[] }
-  | { type: "handover"; handover: Handover };
+  | { type: "reply"; text: string; productIds: string[]; sources: ChatSource[]; usage: AssistantUsage }
+  | { type: "handover"; handover: Handover; usage: AssistantUsage };
+
+const noUsage = (): AssistantUsage => ({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearches: 0 });
+
+function addUsage(total: AssistantUsage, usage: Anthropic.Beta.BetaUsage) {
+  total.inputTokens += usage.input_tokens;
+  total.outputTokens += usage.output_tokens;
+  total.cacheReadTokens += usage.cache_read_input_tokens ?? 0;
+  total.cacheWriteTokens += usage.cache_creation_input_tokens ?? 0;
+  total.webSearches += usage.server_tool_use?.web_search_requests ?? 0;
+}
+
+/** Same rule as the search's allowed_domains: the site itself or one of its subdomains. */
+export function isTrustedUrl(url: string) {
+  try {
+    const host = new URL(url).hostname;
+    return TRUSTED_SITES.some((site) => host === site || host.endsWith(`.${site}`));
+  } catch {
+    return false;
+  }
+}
+
+/** The pages the final reply cites, one pill each. Only trusted sites count, whatever the API returned. */
+function webSources(blocks: Anthropic.Beta.BetaTextBlock[]): ChatSource[] {
+  const pages = new Map<string, ChatSource>();
+  for (const citation of blocks.flatMap((b) => b.citations ?? [])) {
+    if (citation.type !== "web_search_result_location" || !isTrustedUrl(citation.url) || pages.has(citation.url)) continue;
+    const label = new URL(citation.url).hostname.replace(/^www\./, "");
+    pages.set(citation.url, { label, url: citation.url, title: citation.title ?? undefined });
+  }
+  return [...pages.values()];
+}
 
 let client: Anthropic | undefined;
 function anthropic() {
@@ -124,9 +170,15 @@ async function searchProducts(query: string) {
  */
 export async function runAssistant(history: AssistantTurn[]): Promise<AssistantOutcome> {
   const messages: Anthropic.Beta.BetaMessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
+  const usage = noUsage();
+  const handover = (reason: string, extra: Partial<Handover> = {}): AssistantOutcome => ({
+    type: "handover",
+    handover: { severity: null, reason, ...extra },
+    usage,
+  });
   const found = new Set<string>();
   let recommended: string[] = [];
-  let searched = false;
+  let searchedCatalogue = false;
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const response = await anthropic().beta.messages.create({
@@ -141,31 +193,36 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
       tools: TOOLS,
       messages,
     });
+    addUsage(usage, response.usage);
 
-    if (response.stop_reason === "refusal") {
-      return { type: "handover", handover: { severity: null, reason: "The assistant couldn’t answer this message." } };
-    }
-    if (response.stop_reason === "max_tokens") {
-      return { type: "handover", handover: { severity: null, reason: "The assistant’s reply was cut off." } };
+    if (response.stop_reason === "refusal") return handover("The assistant couldn’t answer this message.");
+    if (response.stop_reason === "max_tokens") return handover("The assistant’s reply was cut off.");
+    // A long web search can pause the turn; sending it back unchanged lets it continue.
+    if (response.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: response.content });
+      continue;
     }
 
     const toolUses = response.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
     const escalation = toolUses.find((t) => t.name === "escalate_to_pharmacist");
     if (escalation) {
       const input = escalation.input as { severity: keyof typeof SEVERITY; reason: string; summary: string };
-      return {
-        type: "handover",
-        handover: { severity: SEVERITY[input.severity] ?? "MODERATE", reason: input.reason, note: input.summary },
-      };
+      return handover(input.reason, { severity: SEVERITY[input.severity] ?? "MODERATE", note: input.summary });
     }
 
     if (response.stop_reason !== "tool_use") {
-      const text = response.content
-        .flatMap((b) => (b.type === "text" ? [b.text] : []))
-        .join("\n")
-        .trim();
-      if (!text) return { type: "handover", handover: { severity: null, reason: "The assistant gave no answer." } };
-      return { type: "reply", text, productIds: recommended, sources: searched ? [CATALOGUE_SOURCE] : [] };
+      // All text in the final response is the reply (working notes come back as thinking, not text),
+      // even when a search sits between parts of it. Cited text arrives split into several blocks,
+      // so they're joined without separators.
+      const replyBlocks = response.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text");
+      const text = replyBlocks.map((b) => b.text).join("").trim();
+      if (!text) return handover("The assistant gave no answer.");
+
+      const heldBack = await reviewReply(text);
+      if (heldBack) return handover(heldBack, { note: `Held-back reply: ${text}` });
+
+      const sources = [...(searchedCatalogue ? [CATALOGUE_SOURCE] : []), ...webSources(replyBlocks)];
+      return { type: "reply", text, productIds: recommended, sources, usage };
     }
 
     messages.push({ role: "assistant", content: response.content });
@@ -173,7 +230,7 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
     for (const tool of toolUses) {
       if (tool.name === "search_products") {
         const products = await searchProducts((tool.input as { query: string }).query);
-        searched = true;
+        searchedCatalogue = true;
         products.forEach((p) => found.add(p.id));
         const listing = products.map((p) => ({
           id: p.id,
@@ -207,5 +264,21 @@ export async function runAssistant(history: AssistantTurn[]): Promise<AssistantO
     messages.push({ role: "user", content: results });
   }
 
-  return { type: "handover", handover: { severity: null, reason: "The assistant couldn’t finish its answer." } };
+  return handover("The assistant couldn’t finish its answer.");
+}
+
+/**
+ * The full decision for a customer message, in order: possible-emergency wording goes straight to a
+ * pharmacist without asking the model; so does everything when the assistant is off or the chat has
+ * reached its reply limit; the rest goes to the assistant. Used by the chat and by evals/chat.
+ */
+export async function triageAndAnswer(history: AssistantTurn[], { replyLimitReached = false } = {}): Promise<AssistantOutcome> {
+  const latest = history.at(-1)?.content ?? "";
+  const skip = (handover: Handover): AssistantOutcome => ({ type: "handover", handover, usage: noUsage() });
+  if (looksLikeEmergency(latest)) {
+    return skip({ severity: "EMERGENCY", reason: "Message mentions possible emergency symptoms.", note: latest });
+  }
+  if (!isAssistantConfigured()) return skip({ severity: null, reason: "The assistant isn’t switched on." });
+  if (replyLimitReached) return skip({ severity: null, reason: "Long conversation with the assistant." });
+  return runAssistant(history);
 }

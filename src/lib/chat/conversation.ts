@@ -3,8 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { db } from "@/lib/db";
 import { getCurrentProfile } from "@/lib/auth";
-import { isAssistantConfigured } from "@/lib/env";
-import { runAssistant, type AssistantOutcome, type AssistantTurn } from "@/lib/chat/assistant";
+import { triageAndAnswer, type AssistantOutcome, type AssistantTurn } from "@/lib/chat/assistant";
 import { CHAT_NOTICES, handoverNotice, looksLikeEmergency, type Handover } from "@/lib/chat/triage";
 import type { ChatMessageView, ChatProduct, ChatSource, ChatState, ChatSummary, ChatView } from "@/lib/chat/types";
 import type { ChatConversation, ChatRole, Prisma, Profile } from "@/generated/prisma/client";
@@ -147,21 +146,11 @@ async function assistantHistory(chatId: string): Promise<AssistantTurn[]> {
   return turns;
 }
 
-async function answerWithAssistant(chat: ChatConversation, text: string) {
-  if (looksLikeEmergency(text)) {
-    return handOver(chat.id, { severity: "EMERGENCY", reason: "Message mentions possible emergency symptoms.", note: text });
-  }
-  if (!isAssistantConfigured()) {
-    return handOver(chat.id, { severity: null, reason: "The assistant isn’t switched on." });
-  }
+async function answerWithAssistant(chat: ChatConversation) {
   const replies = await db.chatMessage.count({ where: { conversationId: chat.id, role: "ASSISTANT" } });
-  if (replies >= MAX_ASSISTANT_REPLIES) {
-    return handOver(chat.id, { severity: null, reason: "Long conversation with the assistant." });
-  }
-
   let outcome: AssistantOutcome;
   try {
-    outcome = await runAssistant(await assistantHistory(chat.id));
+    outcome = await triageAndAnswer(await assistantHistory(chat.id), { replyLimitReached: replies >= MAX_ASSISTANT_REPLIES });
   } catch (err) {
     console.error("Chat assistant failed", err);
     return handOver(chat.id, { severity: null, reason: "The assistant was unavailable." });
@@ -191,7 +180,7 @@ export async function sendCustomerMessage(chatId: string | undefined, text: stri
   await addMessage(chat.id, "CUSTOMER", text);
 
   if (chat.status === "BOT") {
-    await answerWithAssistant(chat, text);
+    await answerWithAssistant(chat);
   } else if (chat.severity !== "EMERGENCY" && looksLikeEmergency(text)) {
     // Already with the pharmacists: move it to the top of their queue and give the same safety advice.
     await db.chatConversation.update({ where: { id: chat.id }, data: { severity: "EMERGENCY" } });

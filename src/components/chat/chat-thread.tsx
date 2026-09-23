@@ -59,28 +59,31 @@ function Bubble({ message: m, viewer }: { message: ChatMessageView; viewer: View
   );
 }
 
+const isWebsite = (source: ChatSource) => !!source.url && !source.url.startsWith("/");
+
 /**
- * Where an assistant reply's information came from. The advice itself is always the model's own
- * knowledge; recorded sources (the catalogue, later websites) are added as their own pills.
+ * Where an assistant reply's information came from: each trusted website page it cited and the
+ * catalogue if it looked products up. A reply that cites no website is marked as the model's own knowledge.
  */
 function Provenance({ sources }: { sources: ChatSource[] }) {
   return (
     <div className="flex max-w-[85%] flex-wrap gap-1.5 px-1">
-      <SourcePill icon={Sparkles} label="AI general knowledge" title="Health advice comes from the AI model’s training, not from a specific website or document." />
+      {!sources.some(isWebsite) && (
+        <SourcePill icon={Sparkles} label="AI general knowledge" title="Written from the AI model’s training, not from a specific website or document." />
+      )}
       {sources.map((source) => (
-        <SourcePill key={source.label} icon={source.url?.startsWith("/") ? Package : Globe} {...source} />
+        <SourcePill key={source.url ?? source.label} icon={isWebsite(source) ? Globe : Package} {...source} />
       ))}
     </div>
   );
 }
 
-function SourcePill({ icon: Icon, label, url, title }: ChatSource & { icon: LucideIcon; title?: string }) {
+function SourcePill({ icon: Icon, label, url, title }: ChatSource & { icon: LucideIcon }) {
   const content = <><Icon data-icon="inline-start" /> {label}</>;
   if (!url) return <Badge variant="outline" title={title}>{content}</Badge>;
-  const external = !url.startsWith("/");
   return (
-    <Badge asChild variant="outline" className="hover:bg-accent">
-      {external ? <a href={url} target="_blank" rel="noreferrer">{content}</a> : <Link href={url}>{content}</Link>}
+    <Badge asChild variant="outline" className="hover:bg-accent" title={title}>
+      {url.startsWith("/") ? <Link href={url}>{content}</Link> : <a href={url} target="_blank" rel="noreferrer">{content}</a>}
     </Badge>
   );
 }
