@@ -11,7 +11,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "migrate:firebase": "tsx scripts/migrate-from-firebase.ts"
+    "migrate:firebase": "tsx scripts/migrate-from-firebase.ts",
+    "eval:chat": "tsx --env-file=.env --conditions=react-server evals/chat/run.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

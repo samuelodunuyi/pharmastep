@@ -33,3 +33,6 @@ npm-debug.log*
 .idea
 .vscode/*
 !.vscode/extensions.json
+
+# chat assistant eval reports (may contain model output for review)
+evals/chat/results/
